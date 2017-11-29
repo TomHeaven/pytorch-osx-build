@@ -28,12 +28,17 @@ pip uninstall torch
 
 At last, uncompress and install the binary package from this project:
 
-最后，解压并安装：
+解压并安装：
 
 ```
 cat torch* > torch.whl.zip
 unzip torch.whl.zip
 pip install torch*.whl
+```
+
+安装torchvision
+```
+pip install torchvision*.whl
 ```
 
 Enjoy!
