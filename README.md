@@ -18,9 +18,9 @@ First, ensure your CUDA driver and cudnn is installed properly.
 
 首先，确保CUDA驱动和cudnn正确安装。
 
-Second, uninstall the previous tensorflow installtion by
+Second, uninstall the previous pytorch installtion by
 
-其次，卸载之前版本的Tensorflow:
+其次，卸载之前版本的pytorch:
 
 ```
 pip uninstall torch
