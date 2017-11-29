@@ -26,7 +26,7 @@ Second, uninstall the previous pytorch installtion by
 pip uninstall torch
 ```
 
-At last, uncompress and install the binary package from this project:
+Uncompress and install the binary package from this project:
 
 解压并安装：
 
@@ -36,7 +36,9 @@ unzip torch.whl.zip
 pip install torch*.whl
 ```
 
-安装torchvision
+Install torchvision:
+
+安装torchvision：
 ```
 pip install torchvision*.whl
 ```
