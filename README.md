@@ -8,6 +8,11 @@ Unfortunately, the Pytorch team does not release binary package for Mac OS with 
 
 # Releases
 
+
+`` Note: The current repo seems to contain bugs about tensor sum due to bugs in the pytorch source code.  Using the old whl files in releases is recommended! I'm waiting for the pytorch team to fix the bugs and re-compile this project.``
+
+``请注意：本次更新似乎包含关于张量加法的 Bug，这是因为pytorch源码中包含了BUG。目前建议使用Release页面中的老版本。在Pytorch团队修复BUG后，我会再次更新本项目。``
+
 | FileName | pytorch | CUDA | CUDNN | Compute Capability | Compilation Time |
 |:--:|:--:|:--:|:--:|:--:|:--:|
 | torch-0.4.0a0+e3e0c34-cp36-cp36m-macosx\_10\_12_intel.whl | 0.4.0a0+e | 8.0 | 6 | 3.0,3.5,5.2,6.1 | 2018-03-27 |
@@ -29,7 +34,7 @@ First, ensure your CUDA driver and cudnn is installed properly, and copy depende
 ```
 sudo mkdir /usr/local
 sudo mkdir /usr/local/lib
-sudo copy usr_local_lib/* /usr/local/lib/
+sudo cp usr_local_lib/* /usr/local/lib/
 ```
 
 
