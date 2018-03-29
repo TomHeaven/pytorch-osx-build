@@ -9,9 +9,9 @@ Unfortunately, the Pytorch team does not release binary package for Mac OS with 
 # Releases
 
 
-`` Note: The current repo seems to contain bugs about tensor sum due to bugs in the pytorch source code.  Using the old whl files in releases is recommended! I'm waiting for the pytorch team to fix the bugs and re-compile this project.``
+`` Note: There are behavior or syntax changes including ByteTensor sum and fetching Tensor scalars in this update.  Your old code may encounter syntax errors or get different results using the current repo. Look for support in Pytorch forum if you have trouble using the current repo!``
 
-``请注意：本次更新似乎包含关于张量加法的 Bug，这是因为pytorch源码中包含了BUG。目前建议使用Release页面中的老版本。在Pytorch团队修复BUG后，我会再次更新本项目。``
+``请注意：本次更新包含一些语法和ByteTensor加法的行为变化。你之前的代码可能遭遇语法错误或者得到不同的结果。如果遇到相关问题，请到Pytorch论坛寻求帮助！``
 
 | FileName | pytorch | CUDA | CUDNN | Compute Capability | Compilation Time |
 |:--:|:--:|:--:|:--:|:--:|:--:|
