@@ -5,16 +5,17 @@ Unfortunately, the Pytorch team does not release binary package for Mac OS with 
 
 很不幸，Pytorch团队不发布 Mac OS CUDA版。本项目提供 Mac OS 上编译好、可直接安装的Pytorch CUDA版本。``本项目同时支持Python 2.7 和 3.6 了！``
 
+# Attenion
++ 【2018.07.31】Currently, Nvidia provides CUDA 9.2 driver for Mac OS High Sierra (10.13) only. Therefore, do NOT download the CUDA 9.2 versions if you are using Sierra (10.12).
++ 【2018.07.31】目前，英伟达仅在10.13系统是提供CUDA 9.2。所以如果你使用10.12系统，不要下载CUDA 9.2版本安装包。
+
 
 # Releases
 
-
-`` Note: There are behavior or syntax changes including ByteTensor sum and fetching Tensor scalars in this update.  Your old code may encounter syntax errors or get different results using the current repo. Look for support in Pytorch forum if you have trouble using the current repo!``
-
-``请注意：本次更新包含一些语法和ByteTensor加法的行为变化。你之前的代码可能遭遇语法错误或者得到不同的结果。如果遇到相关问题，请到Pytorch论坛寻求帮助！``
-
 | FileName | pytorch | CUDA | CUDNN | Compute Capability | Compilation Time |
 |:--:|:--:|:--:|:--:|:--:|:--:|
+| torch-0.4.1-cp36-cp36m-macosx\_10\_12_x86_64.whl | 0.4.1 | 9.2 | 7.1 | 3.0,3.5,5.2,6.1 | 2018-07-30 |
+| torch-0.4.1-cp27-cp27m-macosx\_10\_12_intel.whl | 0.4.1 | 9.2 | 7.1 | 3.0,3.5,5.2,6.1 | 2018-07-30 |
 | torch-0.4.0-cp36-cp36m-macosx\_10\_12_intel.whl | 0.4.0 | 9.0 | 7 | 3.0,3.5,5.2,6.1 | 2018-06-08 |
 | torch-0.4.0-cp27-cp27m-macosx\_10\_12_intel.whl | 0.4.0 | 9.0 | 7 | 3.0,3.5,5.2,6.1 | 2018-06-08 |
 | torch-0.4.0a0+e3e0c34-cp36-cp36m-macosx\_10\_12_intel.whl | 0.4.0a0+e | 8.0 | 6 | 3.0,3.5,5.2,6.1 | 2018-03-27 |
@@ -81,3 +82,9 @@ Enjoy!
 # Source Code
 
 Source code from: [https://github.com/pytorch/pytorch](https://github.com/pytorch/pytorch)
+
+# Related Links
+
+If you need Tensorflow builds for osx, go to this page: [https://github.com/TomHeaven/tensorflow-osx-build](https://github.com/TomHeaven/tensorflow-osx-build)
+
+如果你需要Tensorflow包，请看这个页面：[https://github.com/TomHeaven/tensorflow-osx-build](https://github.com/TomHeaven/tensorflow-osx-build)
