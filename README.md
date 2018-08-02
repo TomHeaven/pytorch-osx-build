@@ -14,6 +14,8 @@ Unfortunately, the Pytorch team does not release binary package for Mac OS with 
 
 | FileName | pytorch | CUDA | CUDNN | Compute Capability | Compilation Time |
 |:--:|:--:|:--:|:--:|:--:|:--:|
+| torch-0.4.1-cp36-cp36m-macosx\_10\_12_x86_64.whl | 0.4.1 | 9.0 | 7 | 3.0,3.5,5.2,6.1 | 2018-08-01 |
+| torch-0.4.1-cp27-cp27m-macosx\_10\_12_intel.whl | 0.4.1 | 9.0 | 7 | 3.0,3.5,5.2,6.1 | 2018-08-01 |
 | torch-0.4.1-cp36-cp36m-macosx\_10\_12_x86_64.whl | 0.4.1 | 9.2 | 7.1 | 3.0,3.5,5.2,6.1 | 2018-07-30 |
 | torch-0.4.1-cp27-cp27m-macosx\_10\_12_intel.whl | 0.4.1 | 9.2 | 7.1 | 3.0,3.5,5.2,6.1 | 2018-07-30 |
 | torch-0.4.0-cp36-cp36m-macosx\_10\_12_intel.whl | 0.4.0 | 9.0 | 7 | 3.0,3.5,5.2,6.1 | 2018-06-08 |
