@@ -6,7 +6,7 @@ Unfortunately, the Pytorch team does not release binary package for Mac OS with 
 很不幸，Pytorch团队不发布 Mac OS CUDA版。本项目提供 Mac OS 上编译好、可直接安装的Pytorch CUDA版本。``本项目同时支持Python 2.7 和 3.x 了！``
 
 # Attenion
-+ 【2018.11.30】Compiled with OpenMP support with a guide.
++ 【2018.11.30】Compiled with OpenMP support with a [guide](https://github.com/TomHeaven/pytorch-osx-build/blob/master/BuildInstractions-1.0rc1.md).
 + 【2018.07.31】Currently, Nvidia provides CUDA 9.2 driver for Mac OS High Sierra (10.13) only. Therefore, do NOT download the CUDA 9.2 versions if you are using Sierra (10.12).
 
 
