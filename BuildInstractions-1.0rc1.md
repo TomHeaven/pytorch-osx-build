@@ -5,7 +5,7 @@ By TomHeaven @ 2018.11.30
 
 ---
 
-If you only want to use pytorch on Mac with CUDA support, first go to release page: [https://github.com/TomHeaven/tensorflow-osx-build/releases](https://github.com/TomHeaven/tensorflow-osx-build/releases) and try to find proper wheel pakcages. 
+If you only want to use pytorch on Mac with CUDA support, first go to release page: [https://github.com/TomHeaven/pytorch-osx-build/releases](https://github.com/TomHeaven/pytorch-osx-build/releases) and try to find proper wheel pakcages. 
 
 However, as their are mulitple versions of python (2.7, 3.6, 3.7) and CUDA (8.0, 9.0, 9.2, 10.0). It's more and more time consuming to support all combinations of them. If your combination of python and CUDA is not listed in the release page, you may need to compile a wheel package yourself.
 
