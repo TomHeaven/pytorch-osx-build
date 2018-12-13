@@ -1,9 +1,9 @@
 # Pytorch OSX Build
 
-Unfortunately, the Pytorch team does not release binary package for Mac OS with CUDA support. This project provides off-the-shelf binary packages. ``Both Python 2.7 and 3.x are supported now!``
+Unfortunately, the Pytorch team does not release binary package for Mac OS with CUDA support. This project provides off-the-shelf binary packages. ``Both Python 2.7 and 3.7 are supported now!``
 
 
-很不幸，Pytorch团队不发布 Mac OS CUDA版。本项目提供 Mac OS 上编译好、可直接安装的Pytorch CUDA版本。``本项目同时支持Python 2.7 和 3.x 了！``
+很不幸，Pytorch团队不发布 Mac OS CUDA版。本项目提供 Mac OS 上编译好、可直接安装的Pytorch CUDA版本。``本项目同时支持Python 2.7 和 3.7 了！``
 
 # Attenion
 + 【2018.11.30】Compiled with OpenMP support with a [guide](https://github.com/TomHeaven/pytorch-osx-build/blob/master/BuildInstractions-1.0rc1.md).
@@ -14,8 +14,8 @@ Unfortunately, the Pytorch team does not release binary package for Mac OS with 
 
 | FileName | pytorch | CUDA | CUDNN | Compute Capability | Compilation Time |
 |:--:|:--:|:--:|:--:|:--:|:--:|
-| torch-1.0-cp27-cp27m-macosx\_10\_13_intel.whl | 1.0 | 9.0 | 7 | 3.0,3.5,5.2,6.1 | 2018-11-30 |
-| torch-1.0-cp37-cp37m-macosx\_10\_13\_x86\_64.whl | 1.0 | 9.0 | 7 | 3.0,3.5,5.2,6.1 | 2018-12-13 |
+| torch-1.0-cp27-cp27m-macosx\_10\_12_intel.whl | 1.0 | 9.0 | 7 | 3.0,3.5,5.2,6.1 | 2018-11-30 |
+| torch-1.0-cp37-cp37m-macosx\_10\_12\_x86\_64.whl | 1.0 | 9.0 | 7 | 3.0,3.5,5.2,6.1 | 2018-12-13 |
 | torch-1.0.0a0+ff608a9-cp27-cp27m-macosx\_10\_13_intel.whl | 1.0rc1 | 9.0 | 7 | 3.0,3.5,5.2,6.1 | 2018-12-13 |
 | torch-1.0.0a0+ff608a9-cp37-cp37m-macosx\_10\_13\_x86\_64.whl | 1.0rc1 | 9.0 | 7 | 3.0,3.5,5.2,6.1 | 2018-11-30 |
 | torch-0.4.1-cp36-cp36m-macosx\_10\_12\_x86\_64.whl | 0.4.1 | 9.0 | 7 | 3.0,3.5,5.2,6.1 | 2018-08-01 |
@@ -67,7 +67,7 @@ Install torchvision:
 pip install -U torchvision
 ```
 
-# Installation for Python 3.x
+# Installation for Python 3
 
 Install Python 3.x from Homebrew first, and then simply follow the guide for Python 2.7 and replace `pip` command with `pip3` and `python` with `python3`.
 
