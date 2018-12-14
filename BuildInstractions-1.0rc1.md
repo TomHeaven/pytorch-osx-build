@@ -51,7 +51,7 @@ git submodule update --init
 ## Update Dependency.cmake
 
 
-The default OpenMP detection will fail. So let's just manually set related buid flags and skip the detection by modify `cmake/Dependency.cmake:448` as
+The default OpenMP detection will fail. So let's just manually set related build flags and skip the detection by modifying `cmake/Dependency.cmake:448` as
 
 ```CMake
 # ---[ OpenMP
