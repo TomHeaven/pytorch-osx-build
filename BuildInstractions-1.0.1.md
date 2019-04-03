@@ -16,10 +16,10 @@ This guide will help you compile a wheel package of pytorch-1.0.1 on Mac OS X 10
 
 Dependencies:
 
-+ Mac OS 10.13.
++ Mac OS 10.13.x.
 + XCode 9.4.1
 + CUDA 10.0 and CuDNN7.4 
-+ Optinally, Openblas for CPU accelerated matrix computation and so on. In previous releases (about 0.3.0 or 0.4.0), Pytorch cannot correctly detect vecLib on Mac OS. So we need Openblas as an alternative. However, this problem seems to be sovled now and we no longer have to install openblas.
++ Optinally, Openblas for CPU accelerated matrix computation and so on. In previous releases (about 0.3.0 or 0.4.0), Pytorch cannot correctly detect vecLib on Mac OS. So we need Openblas as an alternative. However, this problem seems to be solved now and we no longer have to install openblas.
 
 ```
 brew install openblas
@@ -32,13 +32,16 @@ brew link --overwrite openblas
 brew install libomp
 brew link --overwrite libomp
 ```
-+ Optionally, OpenMPI for distributed computation. With OpenMPI, you can use `mpi` as backend for `torch.distributed.deprecated` (The newly constructed `torch.distributed` does not support Mac OS yet.) and enjoy distributed training with multiple machines and GPUs on Mac OS. 
++ 【Most of you don't need this.】Optionally, OpenMPI for distributed computation. The default supported backend on Mac OS is `tcp`. With OpenMPI, you can use `mpi` as backend in `torch.distributed.deprecated` (The newly constructed `torch.distributed` does not support Mac OS yet.) and enjoy distributed training with multiple machines and GPUs. 
 
 ```
 brew install openmpi
 brew link --overwrite openmpi
 ```
 
+Distributed computation sounds great but requires extra efforts in coding. See https://pytorch.org/tutorials/intermediate/dist_tuto.html.
+
+I'm also eagerly waiting for NCCL, a better distributed backend, for Mac OS and opened an issue https://github.com/NVIDIA/nccl/issues/201 there to make developers in Nvidia aware of the request.
 
 
 ## Clone Pytorch Repo
@@ -84,7 +87,7 @@ The default OpenMP detection will fail. If you need OpenMP, manually set related
 ```
 to make caffe2 use OpenMP.
 
-+ modify `/third_party/ideep/mkl-dnn/cmake/OpenMP.cmake:93` as
++ modify `third_party/ideep/mkl-dnn/cmake/OpenMP.cmake:93` as
 
 ```
 #set(OpenMP_CXX_FLAGS "-fopenmp")
