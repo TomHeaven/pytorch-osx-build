@@ -122,7 +122,7 @@ Compile using
 export PYTORCH_BUILD_VERSION=1.0.1
 export PYTORCH_BUILD_NUMBER=1
 # set CUDA_ARCH
-export TORCH_CUDA_ARCH_LIST="3.5;3.5;5.2;7.0"
+export TORCH_CUDA_ARCH_LIST="3.5;5.2;6.1;7.0"
 # compile for python2
 pip install pyyaml
 python setup.py bdist_wheel
