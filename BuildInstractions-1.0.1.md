@@ -1,4 +1,4 @@
-# Build Instrctions of Pytorch 1.0rc1 on Mac OS X 10.13
+# Build Instrctions of Pytorch 1.0.1 on Mac OS X 10.13
 
 
 By TomHeaven @ 2019.4.3
