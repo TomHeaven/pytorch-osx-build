@@ -12,21 +12,6 @@ Unfortunately, the Pytorch team does not release binary package for Mac OS with 
 
 # Releases
 
-| FileName | pytorch | CUDA | CUDNN | Compute Capability | Compilation Time |
-|:--:|:--:|:--:|:--:|:--:|:--:|
-| torch-1.0.1-cp27-cp27m-macosx\_10\_13_intel.whl | 1.0 | 10.0 | 7.4 | 3.5,5.2,6.1,7.0 | 2018-03-26 |
-| torch-1.0.1-cp37-cp37m-macosx\_10\_13\_x86\_64.whl | 1.0 | 10.0 | 7.4 | 3.5,5.2,6.1,7.0 | 2018-03-26 |
-| torch-1.0-cp27-cp27m-macosx\_10\_12_intel.whl | 1.0 | 10.0 | 7.4 | 3.0,3.5,5.2,6.1 | 2018-12-21 |
-| torch-1.0-cp37-cp37m-macosx\_10\_12\_x86\_64.whl | 1.0 | 10.0 | 7.4 | 3.0,3.5,5.2,6.1 | 2018-12-21 |
-| torch-1.0-cp27-cp27m-macosx\_10\_12_intel.whl | 1.0 | 9.0 | 7 | 3.0,3.5,5.2,6.1 | 2018-12-13 |
-| torch-1.0-cp37-cp37m-macosx\_10\_12\_x86\_64.whl | 1.0 | 9.0 | 7 | 3.0,3.5,5.2,6.1 | 2018-12-13 |
-| torch-1.0.0a0+ff608a9-cp27-cp27m-macosx\_10\_13_intel.whl | 1.0rc1 | 9.0 | 7 | 3.0,3.5,5.2,6.1 | 2018-11-30 |
-| torch-1.0.0a0+ff608a9-cp37-cp37m-macosx\_10\_13\_x86\_64.whl | 1.0rc1 | 9.0 | 7 | 3.0,3.5,5.2,6.1 | 2018-11-30 |
-| torch-0.4.1-cp36-cp36m-macosx\_10\_12\_x86\_64.whl | 0.4.1 | 9.0 | 7 | 3.0,3.5,5.2,6.1 | 2018-08-01 |
-| torch-0.4.1-cp27-cp27m-macosx\_10\_12_intel.whl | 0.4.1 | 9.0 | 7 | 3.0,3.5,5.2,6.1 | 2018-08-01 |
-| torch-0.4.1-cp36-cp36m-macosx\_10\_12\_x86\_64.whl | 0.4.1 | 9.2 | 7.1 | 3.0,3.5,5.2,6.1 | 2018-07-30 |
-| torch-0.4.1-cp27-cp27m-macosx\_10\_12_intel.whl | 0.4.1 | 9.2 | 7.1 | 3.0,3.5,5.2,6.1 | 2018-07-30 |
-...
 
 You can find releases in  [release page](https://github.com/TomHeaven/pytorch-osx-build/releases).
 
