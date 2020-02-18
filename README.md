@@ -5,9 +5,25 @@ Unfortunately, the Pytorch team does not release binary package for Mac OS with 
 
 很不幸，Pytorch团队不发布 Mac OS CUDA版。本项目提供 Mac OS 上编译好、可直接安装的Pytorch CUDA版本。``本项目同时支持Python 2.7 和 3.7 了！``
 
-# Attenion
-+ 【2018.11.30】Compiled with OpenMP support with a [guide](https://github.com/TomHeaven/pytorch-osx-build/blob/master/BuildInstractions-1.0rc1.md).
-+ 【2018.07.31】Currently, Nvidia provides CUDA 9.2 driver for Mac OS High Sierra (10.13) only. Therefore, do NOT download the CUDA 9.2 versions if you are using Sierra (10.12).
+# Performance Warning
+【2020.02.18】I benchmarked Pytorch 1.3.1 with CUDA 10.1 and CUDNN 7.6.5 on Mac OS X 10.13.6 and Ubuntu 16.04, performance on Mac OS is around 2/3 of that on Ubuntu. In addition, it is more likey to encounter "CUDA OUT OF MEMORY" error on Mac OS since the operating system takes a large amount of GPU memory for display. Be aware of this performance difference and if you have a lot of data to process, you would better turn to Ubuntu!
+
+The following table lists training time of MNIST image classification demo.
+
+| Settings  | Single GPU | Dual GPUs |
+|-- | -- | -- |
+| Ubuntu 1080Ti	| 99.76 s | 50.99 s |
+| MacOS 1080Ti	| 156 s   | 82 s    |
+
+
+# Compile Yourself
+If you find the releases cannot meet your requirements, you can compile from source youreself.
+
++ Guides are avaiable: 
+ - [1.0.1](https://github.com/TomHeaven/pytorch-osx-build/blob/master/BuildInstractions-1.0.1.md).
+ - [1.0rc1](https://github.com/TomHeaven/pytorch-osx-build/blob/master/BuildInstractions-1.0rc1.md).
++ Source pathces are availabe at `source_pathes` folder of master branch.
+
 
 
 # Releases
