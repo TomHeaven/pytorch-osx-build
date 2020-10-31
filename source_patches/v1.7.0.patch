@@ -1,0 +1,254 @@
+diff --git a/android/libs/fbjni b/android/libs/fbjni
+index f908b58be4..933d3a5fd1 160000
+--- a/android/libs/fbjni
++++ b/android/libs/fbjni
+@@ -1 +1 @@
+-Subproject commit f908b58be482874137fa4c0e71333e4eca481706
++Subproject commit 933d3a5fd1f1f46ba08c9a9557d7a765e403364b
+diff --git a/aten/src/ATen/test/CMakeLists.txt b/aten/src/ATen/test/CMakeLists.txt
+index 43d0fc8ccd..975e1a5449 100644
+--- a/aten/src/ATen/test/CMakeLists.txt
++++ b/aten/src/ATen/test/CMakeLists.txt
+@@ -18,7 +18,7 @@ list(APPEND ATen_CPU_TEST_SRCS
+   ${CMAKE_CURRENT_SOURCE_DIR}/dlconvertor_test.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/native_test.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/scalar_tensor_test.cpp
+-  ${CMAKE_CURRENT_SOURCE_DIR}/test_parallel.cpp
++  #${CMAKE_CURRENT_SOURCE_DIR}/test_parallel.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/undefined_tensor_test.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/verify_api_visibility.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/thread_init_test.cpp
+diff --git a/aten/src/ATen/test/test_install/CMakeLists.txt b/aten/src/ATen/test/test_install/CMakeLists.txt
+index 2add3bffa2..86b612c1d9 100644
+--- a/aten/src/ATen/test/test_install/CMakeLists.txt
++++ b/aten/src/ATen/test/test_install/CMakeLists.txt
+@@ -4,7 +4,7 @@ include_directories(${ATEN_INCLUDE_DIR})
+ 
+ # C++14
+ if(not MSVC)
+-    set(CMAKE_CXX_FLAGS "--std=c++14 ${CMAKE_CXX_FLAGS}")
++     set(CMAKE_CXX_FLAGS "--std=c++14 ${CMAKE_CXX_FLAGS} -Xpreprocessor -fopenmp -I/usr/local/include -L/usr/local/lib -lomp -lgomp")
+ endif()
+ add_executable(main main.cpp)
+ target_link_libraries(main ${ATEN_LIBRARIES})
+diff --git a/aten/src/THC/generic/THCTensorMasked.cu b/aten/src/THC/generic/THCTensorMasked.cu
+index 344b0c35ef..e84604a5ac 100644
+--- a/aten/src/THC/generic/THCTensorMasked.cu
++++ b/aten/src/THC/generic/THCTensorMasked.cu
+@@ -60,13 +60,13 @@ void THCTensor_(maskedCopy)(THCState* state,
+              "mask and tensor must have the same number of elements");
+ 
+   // Determine our output size
+-  ptrdiff_t totalElements = THTensor_wrap(mask).sum().item<ptrdiff_t>();
++  //ptrdiff_t totalElements = THTensor_wrap(mask).sum().item<ptrdiff_t>();
+ 
+   // The number of `1` elements present in the mask must be <= the
+   // number of elements available in `src`
+-  if (totalElements > srcSize) {
+-    THArgCheck(false, 2, "source nElements must be == mask `1` elements");
+-  }
++  //if (totalElements > srcSize) {
++  //  THArgCheck(false, 2, "source nElements must be == mask `1` elements");
++  //}
+ 
+   // FIXME: there appears to be a bug in Thrust (CUDA 7.0) for mixed
+   // iterator prefix sums? Convert `mask` to the same datatype as what
+@@ -126,13 +126,13 @@ void THCTensor_(maskedCopyBool)(THCState* state,
+              "mask and tensor must have the same number of elements");
+ 
+   // Determine our output size
+-  ptrdiff_t totalElements = THTensor_wrap(mask).sum().item<ptrdiff_t>();
++  //ptrdiff_t totalElements = THTensor_wrap(mask).sum().item<ptrdiff_t>();
+ 
+   // The number of `1` elements present in the mask must be <= the
+   // number of elements available in `src`
+-  if (totalElements > srcSize) {
+-    THArgCheck(false, 2, "source nElements must be == mask `1` elements");
+-  }
++  //if (totalElements > srcSize) {
++  //  THArgCheck(false, 2, "source nElements must be == mask `1` elements");
++  //}
+ 
+   // FIXME: there appears to be a bug in Thrust (CUDA 7.0) for mixed
+   // iterator prefix sums? Convert `mask` to the same datatype as what
+diff --git a/cmake/Modules/FindOpenMP.cmake b/cmake/Modules/FindOpenMP.cmake
+index 8ec0b44310..cae6380775 100644
+--- a/cmake/Modules/FindOpenMP.cmake
++++ b/cmake/Modules/FindOpenMP.cmake
+@@ -89,7 +89,7 @@ function(_OPENMP_FLAG_CANDIDATES LANG)
+     # AppleClang may need a header file, search for omp.h with hints to brew
+     # default include dir
+     find_path(__header_dir "omp.h" HINTS "/usr/local/include")
+-    set(OMP_FLAG_AppleClang "-Xpreprocessor -fopenmp" "-Xpreprocessor -fopenmp -I${__header_dir}")
++    set(OMP_FLAG_AppleClang "-Xpreprocessor -fopenmp -lomp -lgomp" "-Xpreprocessor -fopenmp -I${__header_dir}")
+ 
+     set(OMP_FLAG_HP "+Oopenmp")
+     if(WIN32)
+diff --git a/third_party/NNPACK b/third_party/NNPACK
+index 24b55303f5..57616b9a0e 160000
+--- a/third_party/NNPACK
++++ b/third_party/NNPACK
+@@ -1 +1 @@
+-Subproject commit 24b55303f5cf65d75844714513a0d1b1409809bd
++Subproject commit 57616b9a0ef7b0f8e56bfe7e9738744b52fe1828
+diff --git a/third_party/XNNPACK b/third_party/XNNPACK
+index 1b354636b5..30d4b250ae 160000
+--- a/third_party/XNNPACK
++++ b/third_party/XNNPACK
+@@ -1 +1 @@
+-Subproject commit 1b354636b5942826547055252f3b359b54acff95
++Subproject commit 30d4b250aef4ee74271c2254943f062a8356a23e
+diff --git a/third_party/benchmark b/third_party/benchmark
+index 505be96ab2..a9704c268d 160000
+--- a/third_party/benchmark
++++ b/third_party/benchmark
+@@ -1 +1 @@
+-Subproject commit 505be96ab23056580a3a2315abba048f4428b04e
++Subproject commit a9704c268dd2ed8bc65d8fc2880cb7a0ddd64d2c
+diff --git a/third_party/cub b/third_party/cub
+index d106ddb991..4bf55edac3 160000
+--- a/third_party/cub
++++ b/third_party/cub
+@@ -1 +1 @@
+-Subproject commit d106ddb991a56c3df1b6d51b2409e36ba8181ce4
++Subproject commit 4bf55edac3ceafd899cdb3617ebe61253f5788e7
+diff --git a/third_party/eigen b/third_party/eigen
+index d41dc4dd74..36b9596275 160000
+--- a/third_party/eigen
++++ b/third_party/eigen
+@@ -1 +1 @@
+-Subproject commit d41dc4dd74acce21fb210e7625d5d135751fa9e5
++Subproject commit 36b95962756c1fce8e29b1f8bc45967f30773c00
+diff --git a/third_party/fbgemm b/third_party/fbgemm
+index 1d710393d5..51245fa528 160000
+--- a/third_party/fbgemm
++++ b/third_party/fbgemm
+@@ -1 +1 @@
+-Subproject commit 1d710393d5b7588f5de3b83f51c22bbddf095229
++Subproject commit 51245fa528c247980c36b5c042056901925bfe12
+diff --git a/third_party/fmt b/third_party/fmt
+index cd4af11efc..4081b2fe94 160000
+--- a/third_party/fmt
++++ b/third_party/fmt
+@@ -1 +1 @@
+-Subproject commit cd4af11efc9c622896a3e4cb599fa28668ca3d05
++Subproject commit 4081b2fe948aec01a49cc6e231bee4e02df3d61e
+diff --git a/third_party/foxi b/third_party/foxi
+index 4aba696ec8..6a4e19a2aa 160000
+--- a/third_party/foxi
++++ b/third_party/foxi
+@@ -1 +1 @@
+-Subproject commit 4aba696ec8f31794fd42880346dc586486205e0a
++Subproject commit 6a4e19a2aaf7ae4b9fa9597526e65b395d5e79ad
+diff --git a/third_party/gemmlowp/gemmlowp b/third_party/gemmlowp/gemmlowp
+index 3fb5c176c1..fda83bdc38 160000
+--- a/third_party/gemmlowp/gemmlowp
++++ b/third_party/gemmlowp/gemmlowp
+@@ -1 +1 @@
+-Subproject commit 3fb5c176c17c765a3492cd2f0321b0dab712f350
++Subproject commit fda83bdc38b118cc6b56753bd540caa49e570745
+diff --git a/third_party/gloo b/third_party/gloo
+index 3dc0328fe6..66a5b347f6 160000
+--- a/third_party/gloo
++++ b/third_party/gloo
+@@ -1 +1 @@
+-Subproject commit 3dc0328fe6a9d47bd47c0c6ca145a0d8a21845c6
++Subproject commit 66a5b347f6610cb057d09d64dfdb6984508a8c69
+diff --git a/third_party/googletest b/third_party/googletest
+index 2fe3bd994b..3005672db1 160000
+--- a/third_party/googletest
++++ b/third_party/googletest
+@@ -1 +1 @@
+-Subproject commit 2fe3bd994b3189899d93f1d5a881e725e046fdc2
++Subproject commit 3005672db1d05f2378f642b61faa96f85498befe
+diff --git a/third_party/ideep b/third_party/ideep
+index ba885200db..b57539e460 160000
+--- a/third_party/ideep
++++ b/third_party/ideep
+@@ -1 +1 @@
+-Subproject commit ba885200dbbc1f144c7b58eba487378eb324f281
++Subproject commit b57539e4608e75f80dbc5c2784643d5f2f242003
+diff --git a/third_party/nccl/nccl b/third_party/nccl/nccl
+index 033d799524..084207e685 160000
+--- a/third_party/nccl/nccl
++++ b/third_party/nccl/nccl
+@@ -1 +1 @@
+-Subproject commit 033d799524fb97629af5ac2f609de367472b2696
++Subproject commit 084207e685c4587e7d0aa2f1f7f148d3e0e68da6
+diff --git a/third_party/neon2sse b/third_party/neon2sse
+index 97a126f08c..67ea94281d 160000
+--- a/third_party/neon2sse
++++ b/third_party/neon2sse
+@@ -1 +1 @@
+-Subproject commit 97a126f08ce318023be604d03f88bf0820a9464a
++Subproject commit 67ea94281d8726619e3bc95e94ec57cc8d61efb7
+diff --git a/third_party/onnx b/third_party/onnx
+index a82c6a7010..5cc790e03b 160000
+--- a/third_party/onnx
++++ b/third_party/onnx
+@@ -1 +1 @@
+-Subproject commit a82c6a7010e2e332d8f74ad5b0c726fd47c85376
++Subproject commit 5cc790e03b2af691c55926a11c116eb9edaa689b
+diff --git a/third_party/onnx-tensorrt b/third_party/onnx-tensorrt
+index c153211418..eb559b6cdd 160000
+--- a/third_party/onnx-tensorrt
++++ b/third_party/onnx-tensorrt
+@@ -1 +1 @@
+-Subproject commit c153211418a7c57ce071d9ce2a41f8d1c85a878f
++Subproject commit eb559b6cdd1ec2169d64c0112fab9b564d8d503b
+diff --git a/third_party/protobuf b/third_party/protobuf
+index d0bfd52211..c5f7b4b0b3 160000
+--- a/third_party/protobuf
++++ b/third_party/protobuf
+@@ -1 +1 @@
+-Subproject commit d0bfd5221182da1a7cc280f3337b5e41a89539cf
++Subproject commit c5f7b4b0b32baab4396d6c023dd4d74d593a0e2f
+diff --git a/third_party/pthreadpool b/third_party/pthreadpool
+index 029c886208..fa75e65a58 160000
+--- a/third_party/pthreadpool
++++ b/third_party/pthreadpool
+@@ -1 +1 @@
+-Subproject commit 029c88620802e1361ccf41d1970bd5b07fd6b7bb
++Subproject commit fa75e65a58a5c70c09c30d17a1fe1c1dff1093ae
+diff --git a/third_party/pybind11 b/third_party/pybind11
+index 25abf7efba..06a54018c8 160000
+--- a/third_party/pybind11
++++ b/third_party/pybind11
+@@ -1 +1 @@
+-Subproject commit 25abf7efba0b2990f5a6dfb0a31bc65c0f2f4d17
++Subproject commit 06a54018c8a9fd9a7be5f5b56414b5da9259f637
+diff --git a/third_party/python-peachpy b/third_party/python-peachpy
+index 07d8fde8ac..84e60a525e 160000
+--- a/third_party/python-peachpy
++++ b/third_party/python-peachpy
+@@ -1 +1 @@
+-Subproject commit 07d8fde8ac45d7705129475c0f94ed8925b93473
++Subproject commit 84e60a525e6f0788e88e090a11c5eb3b0e51a185
+diff --git a/third_party/python-six b/third_party/python-six
+index 15e31431af..c0be8815d1 160000
+--- a/third_party/python-six
++++ b/third_party/python-six
+@@ -1 +1 @@
+-Subproject commit 15e31431af97e5e64b80af0a3f598d382bcdd49a
++Subproject commit c0be8815d13df45b6ae471c4c436cce8c192245d
+diff --git a/third_party/sleef b/third_party/sleef
+index 7f523de651..fd26bedcec 160000
+--- a/third_party/sleef
++++ b/third_party/sleef
+@@ -1 +1 @@
+-Subproject commit 7f523de651585fe25cade462efccca647dcc8d02
++Subproject commit fd26bedcecb579bfd52b99486ee867ed286e327b
+diff --git a/third_party/tensorpipe b/third_party/tensorpipe
+index 95ff931916..d86777dbce 160000
+--- a/third_party/tensorpipe
++++ b/third_party/tensorpipe
+@@ -1 +1 @@
+-Subproject commit 95ff9319161fcdb3c674d2bb63fac3e94095b343
++Subproject commit d86777dbcefa3dd3133e866dbe6f075f2ac6a5e3
+diff --git a/third_party/zstd b/third_party/zstd
+index aec56a52fb..b706286adb 160000
+--- a/third_party/zstd
++++ b/third_party/zstd
+@@ -1 +1 @@
+-Subproject commit aec56a52fbab207fc639a1937d1e708a282edca8
++Subproject commit b706286adbba780006a47ef92df0ad7a785666b6
