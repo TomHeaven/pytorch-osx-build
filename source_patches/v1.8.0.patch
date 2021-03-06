@@ -1,0 +1,124 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 24d3c9b3a4..ccc23522e2 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -323,6 +323,14 @@ if(USE_SYSTEM_LIBS)
+   set(USE_SYSTEM_XNNPACK ON)
+ endif()
+ 
++# Enable NCCL and Gloo
++#set(USE_NCCL ON)
++#set(USE_SYSTEM_NCCL ON)
++set(USE_GLOO ON)
++set(USE_DISTRIBUTED ON)
++set(USE_LIBUV ON) 
++set(USE_TENSORPIPE OFF)
++
+ # Used when building Caffe2 through setup.py
+ option(BUILDING_WITH_TORCH_LIBS "Tell cmake if Caffe2 is being built alongside torch libs" ON)
+ 
+diff --git a/aten/src/ATen/test/CMakeLists.txt b/aten/src/ATen/test/CMakeLists.txt
+index 4bf9bf46a9..1c9dca3fa1 100644
+--- a/aten/src/ATen/test/CMakeLists.txt
++++ b/aten/src/ATen/test/CMakeLists.txt
+@@ -18,7 +18,7 @@ list(APPEND ATen_CPU_TEST_SRCS
+   ${CMAKE_CURRENT_SOURCE_DIR}/dlconvertor_test.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/native_test.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/scalar_tensor_test.cpp
+-  ${CMAKE_CURRENT_SOURCE_DIR}/test_parallel.cpp
++  #${CMAKE_CURRENT_SOURCE_DIR}/test_parallel.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/undefined_tensor_test.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/verify_api_visibility.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/thread_init_test.cpp
+diff --git a/caffe2/CMakeLists.txt b/caffe2/CMakeLists.txt
+index 7bef849c08..317ca2a4a9 100644
+--- a/caffe2/CMakeLists.txt
++++ b/caffe2/CMakeLists.txt
+@@ -351,30 +351,30 @@ if(NOT INTERN_BUILD_MOBILE OR NOT BUILD_CAFFE2_MOBILE)
+       target_link_libraries(process_group_agent PRIVATE torch c10d fmt::fmt-header-only)
+       add_dependencies(process_group_agent torch c10d)
+ 
+-      add_library(tensorpipe_agent
+-        "${TORCH_SRC_DIR}/csrc/distributed/rpc/macros.h"
+-        "${TORCH_SRC_DIR}/csrc/distributed/rpc/tensorpipe_agent.cpp"
+-        "${TORCH_SRC_DIR}/csrc/distributed/rpc/tensorpipe_agent.h"
+-        "${TORCH_SRC_DIR}/csrc/distributed/rpc/tensorpipe_utils.cpp"
+-        "${TORCH_SRC_DIR}/csrc/distributed/rpc/tensorpipe_utils.h"
+-        )
+-      target_link_libraries(tensorpipe_agent PRIVATE torch c10d tensorpipe fmt::fmt-header-only)
+-      add_dependencies(tensorpipe_agent torch c10d)
++      # add_library(tensorpipe_agent
++      #   "${TORCH_SRC_DIR}/csrc/distributed/rpc/macros.h"
++      #   "${TORCH_SRC_DIR}/csrc/distributed/rpc/tensorpipe_agent.cpp"
++      #   "${TORCH_SRC_DIR}/csrc/distributed/rpc/tensorpipe_agent.h"
++      #   "${TORCH_SRC_DIR}/csrc/distributed/rpc/tensorpipe_utils.cpp"
++      #   "${TORCH_SRC_DIR}/csrc/distributed/rpc/tensorpipe_utils.h"
++      #   )
++      # target_link_libraries(tensorpipe_agent PRIVATE torch c10d tensorpipe fmt::fmt-header-only)
++      # add_dependencies(tensorpipe_agent torch c10d)
+       if(USE_TENSORPIPE)
+         if(USE_CUDA)
+-          target_compile_definitions(tensorpipe_agent PUBLIC USE_CUDA)
++        #  target_compile_definitions(tensorpipe_agent PUBLIC USE_CUDA)
+         endif()
+ 
+         if(USE_ROCM)
+-          target_compile_definitions(tensorpipe_agent PRIVATE
+-            USE_ROCM
+-            __HIP_PLATFORM_HCC__
+-          )
++          #target_compile_definitions(tensorpipe_agent PRIVATE
++          #  USE_ROCM
++          #  __HIP_PLATFORM_HCC__
++          #)
+         endif()
+ 
+-        target_compile_definitions(tensorpipe_agent PUBLIC USE_TENSORPIPE)
+-        target_link_libraries(tensorpipe_agent PRIVATE tensorpipe)
+-        add_dependencies(tensorpipe_agent tensorpipe)
++        #target_compile_definitions(tensorpipe_agent PUBLIC USE_TENSORPIPE)
++        #target_link_libraries(tensorpipe_agent PRIVATE tensorpipe)
++        #add_dependencies(tensorpipe_agent tensorpipe)
+       endif()
+     endif()
+   endif()
+diff --git a/modules/detectron/CMakeLists.txt b/modules/detectron/CMakeLists.txt
+index 8041e71d35..22c920b5ac 100644
+--- a/modules/detectron/CMakeLists.txt
++++ b/modules/detectron/CMakeLists.txt
+@@ -4,7 +4,8 @@ file(GLOB_RECURSE Detectron_HIP_SRCS ${CMAKE_CURRENT_SOURCE_DIR}/*.hip)
+ 
+ if(BUILD_CAFFE2_OPS)
+   if(USE_OPENMP AND OPENMP_FOUND)
+-    Set(OpenMP_link ${OpenMP_CXX_LIBRARIES})
++    #Set(OpenMP_link ${OpenMP_CXX_LIBRARIES})
++    Set(OpenMP_link -Xpreprocessor -fopenmp -lomp -lgomp)
+   endif()
+ 
+   # Note(ilijar): Since Detectron ops currently have no
+diff --git a/test/cpp/api/CMakeLists.txt b/test/cpp/api/CMakeLists.txt
+index 3e8467be97..7435ecfd4b 100644
+--- a/test/cpp/api/CMakeLists.txt
++++ b/test/cpp/api/CMakeLists.txt
+@@ -43,7 +43,7 @@ endif()
+ 
+ add_executable(test_api ${TORCH_API_TEST_SOURCES})
+ target_include_directories(test_api PRIVATE ${ATen_CPU_INCLUDE})
+-target_link_libraries(test_api PRIVATE torch gtest)
++target_link_libraries(test_api PRIVATE torch gtest -Xpreprocessor -fopenmp -lomp -lgomp)
+ 
+ if(USE_CUDA)
+   target_link_libraries(test_api PRIVATE
+diff --git a/test/cpp/rpc/CMakeLists.txt b/test/cpp/rpc/CMakeLists.txt
+index 1a283798c6..25f0e8a968 100644
+--- a/test/cpp/rpc/CMakeLists.txt
++++ b/test/cpp/rpc/CMakeLists.txt
+@@ -5,7 +5,7 @@ set(TORCH_RPC_TEST_SOURCES
+   ${TORCH_RPC_TEST_DIR}/test_wire_serialization.cpp
+ )
+ set(TORCH_RPC_TEST_DEPENDENCY_LIBS
+-  torch c10d gtest process_group_agent tensorpipe_agent
++  torch c10d gtest process_group_agent #tensorpipe_agent
+ )
+ 
+ if(USE_GLOO)
