@@ -31,68 +31,32 @@ index 4bf9bf46a9..1c9dca3fa1 100644
    ${CMAKE_CURRENT_SOURCE_DIR}/verify_api_visibility.cpp
    ${CMAKE_CURRENT_SOURCE_DIR}/thread_init_test.cpp
 diff --git a/caffe2/CMakeLists.txt b/caffe2/CMakeLists.txt
-index 7bef849c08..317ca2a4a9 100644
+index 7bef849c08..d8dfc2601a 100644
 --- a/caffe2/CMakeLists.txt
 +++ b/caffe2/CMakeLists.txt
-@@ -351,30 +351,30 @@ if(NOT INTERN_BUILD_MOBILE OR NOT BUILD_CAFFE2_MOBILE)
+@@ -346,7 +346,7 @@ if(NOT INTERN_BUILD_MOBILE OR NOT BUILD_CAFFE2_MOBILE)
+     # easier to other targets that depend on this. However, in that case, by not
+     # setting the USE_TENSORPIPE compile definition, this target will just end
+     # up being empty. Downstream targets should also add a #ifdef guard.
+-    if(NOT WIN32)
++    if(NOT WIN32 AND NOT APPLE)
+       add_library(process_group_agent "${TORCH_SRC_DIR}/csrc/distributed/rpc/process_group_agent.cpp" "${TORCH_SRC_DIR}/csrc/distributed/rpc/process_group_agent.h")
        target_link_libraries(process_group_agent PRIVATE torch c10d fmt::fmt-header-only)
        add_dependencies(process_group_agent torch c10d)
- 
--      add_library(tensorpipe_agent
--        "${TORCH_SRC_DIR}/csrc/distributed/rpc/macros.h"
--        "${TORCH_SRC_DIR}/csrc/distributed/rpc/tensorpipe_agent.cpp"
--        "${TORCH_SRC_DIR}/csrc/distributed/rpc/tensorpipe_agent.h"
--        "${TORCH_SRC_DIR}/csrc/distributed/rpc/tensorpipe_utils.cpp"
--        "${TORCH_SRC_DIR}/csrc/distributed/rpc/tensorpipe_utils.h"
--        )
--      target_link_libraries(tensorpipe_agent PRIVATE torch c10d tensorpipe fmt::fmt-header-only)
--      add_dependencies(tensorpipe_agent torch c10d)
-+      # add_library(tensorpipe_agent
-+      #   "${TORCH_SRC_DIR}/csrc/distributed/rpc/macros.h"
-+      #   "${TORCH_SRC_DIR}/csrc/distributed/rpc/tensorpipe_agent.cpp"
-+      #   "${TORCH_SRC_DIR}/csrc/distributed/rpc/tensorpipe_agent.h"
-+      #   "${TORCH_SRC_DIR}/csrc/distributed/rpc/tensorpipe_utils.cpp"
-+      #   "${TORCH_SRC_DIR}/csrc/distributed/rpc/tensorpipe_utils.h"
-+      #   )
-+      # target_link_libraries(tensorpipe_agent PRIVATE torch c10d tensorpipe fmt::fmt-header-only)
-+      # add_dependencies(tensorpipe_agent torch c10d)
-       if(USE_TENSORPIPE)
-         if(USE_CUDA)
--          target_compile_definitions(tensorpipe_agent PUBLIC USE_CUDA)
-+        #  target_compile_definitions(tensorpipe_agent PUBLIC USE_CUDA)
-         endif()
- 
-         if(USE_ROCM)
--          target_compile_definitions(tensorpipe_agent PRIVATE
--            USE_ROCM
--            __HIP_PLATFORM_HCC__
--          )
-+          #target_compile_definitions(tensorpipe_agent PRIVATE
-+          #  USE_ROCM
-+          #  __HIP_PLATFORM_HCC__
-+          #)
-         endif()
- 
--        target_compile_definitions(tensorpipe_agent PUBLIC USE_TENSORPIPE)
--        target_link_libraries(tensorpipe_agent PRIVATE tensorpipe)
--        add_dependencies(tensorpipe_agent tensorpipe)
-+        #target_compile_definitions(tensorpipe_agent PUBLIC USE_TENSORPIPE)
-+        #target_link_libraries(tensorpipe_agent PRIVATE tensorpipe)
-+        #add_dependencies(tensorpipe_agent tensorpipe)
-       endif()
-     endif()
-   endif()
 diff --git a/modules/detectron/CMakeLists.txt b/modules/detectron/CMakeLists.txt
-index 8041e71d35..22c920b5ac 100644
+index 8041e71d35..d7b49fc53b 100644
 --- a/modules/detectron/CMakeLists.txt
 +++ b/modules/detectron/CMakeLists.txt
-@@ -4,7 +4,8 @@ file(GLOB_RECURSE Detectron_HIP_SRCS ${CMAKE_CURRENT_SOURCE_DIR}/*.hip)
+@@ -4,7 +4,11 @@ file(GLOB_RECURSE Detectron_HIP_SRCS ${CMAKE_CURRENT_SOURCE_DIR}/*.hip)
  
  if(BUILD_CAFFE2_OPS)
    if(USE_OPENMP AND OPENMP_FOUND)
 -    Set(OpenMP_link ${OpenMP_CXX_LIBRARIES})
-+    #Set(OpenMP_link ${OpenMP_CXX_LIBRARIES})
-+    Set(OpenMP_link -Xpreprocessor -fopenmp -lomp -lgomp)
++    if (APPLE)
++      Set(OpenMP_link -Xpreprocessor -fopenmp -lomp -lgomp)
++    else()
++      Set(OpenMP_link ${OpenMP_CXX_LIBRARIES})
++    endif()
    endif()
  
    # Note(ilijar): Since Detectron ops currently have no
@@ -110,15 +74,160 @@ index 3e8467be97..7435ecfd4b 100644
  if(USE_CUDA)
    target_link_libraries(test_api PRIVATE
 diff --git a/test/cpp/rpc/CMakeLists.txt b/test/cpp/rpc/CMakeLists.txt
-index 1a283798c6..25f0e8a968 100644
+index 1a283798c6..8a47de964d 100644
 --- a/test/cpp/rpc/CMakeLists.txt
 +++ b/test/cpp/rpc/CMakeLists.txt
-@@ -5,7 +5,7 @@ set(TORCH_RPC_TEST_SOURCES
-   ${TORCH_RPC_TEST_DIR}/test_wire_serialization.cpp
- )
- set(TORCH_RPC_TEST_DEPENDENCY_LIBS
+@@ -1,49 +1,51 @@
+-set(TORCH_RPC_TEST_DIR "${TORCH_ROOT}/test/cpp/rpc")
+-set(TORCH_RPC_TEST_SOURCES
+-  ${TORCH_ROOT}/test/cpp/common/main.cpp
+-  ${TORCH_RPC_TEST_DIR}/e2e_test_base.cpp
+-  ${TORCH_RPC_TEST_DIR}/test_wire_serialization.cpp
+-)
+-set(TORCH_RPC_TEST_DEPENDENCY_LIBS
 -  torch c10d gtest process_group_agent tensorpipe_agent
-+  torch c10d gtest process_group_agent #tensorpipe_agent
+-)
+-
+-if(USE_GLOO)
+-  list(APPEND TORCH_RPC_TEST_SOURCES
+-    ${TORCH_RPC_TEST_DIR}/test_e2e_process_group.cpp
+-    ${TORCH_RPC_TEST_DIR}/test_e2e_tensorpipe.cpp
+-  )
+-endif()
+-
+-if(USE_TENSORPIPE)
+-  list(APPEND TORCH_RPC_TEST_SOURCES
+-    ${TORCH_RPC_TEST_DIR}/test_tensorpipe_serialization.cpp
++if (NOT APPLE)
++  set(TORCH_RPC_TEST_DIR "${TORCH_ROOT}/test/cpp/rpc")
++  set(TORCH_RPC_TEST_SOURCES
++    ${TORCH_ROOT}/test/cpp/common/main.cpp
++    ${TORCH_RPC_TEST_DIR}/e2e_test_base.cpp
++    ${TORCH_RPC_TEST_DIR}/test_wire_serialization.cpp
+   )
+-  list(APPEND TORCH_RPC_TEST_DEPENDENCY_LIBS
+-    tensorpipe
++  set(TORCH_RPC_TEST_DEPENDENCY_LIBS
++    torch c10d gtest process_group_agent tensorpipe_agent
+   )
+-endif()
+ 
+-add_executable(test_cpp_rpc ${TORCH_RPC_TEST_SOURCES})
+-target_include_directories(
+-  test_cpp_rpc PRIVATE
+-  ${ATen_CPU_INCLUDE})
+-target_link_libraries(test_cpp_rpc PRIVATE ${TORCH_RPC_TEST_DEPENDENCY_LIBS})
++  if(USE_GLOO)
++    list(APPEND TORCH_RPC_TEST_SOURCES
++      ${TORCH_RPC_TEST_DIR}/test_e2e_process_group.cpp
++      ${TORCH_RPC_TEST_DIR}/test_e2e_tensorpipe.cpp
++    )
++  endif()
+ 
+-if(USE_CUDA)
+-  target_link_libraries(test_cpp_rpc PRIVATE
+-    ${CUDA_LIBRARIES}
+-    ${CUDA_NVRTC_LIB}
+-    ${CUDA_CUDA_LIB}
+-    ${TORCH_CUDA_LIBRARIES})
++  if(USE_TENSORPIPE)
++    list(APPEND TORCH_RPC_TEST_SOURCES
++      ${TORCH_RPC_TEST_DIR}/test_tensorpipe_serialization.cpp
++    )
++    list(APPEND TORCH_RPC_TEST_DEPENDENCY_LIBS
++      tensorpipe
++    )
++  endif()
+ 
+-  target_compile_definitions(test_cpp_rpc PRIVATE "USE_CUDA")
+-endif()
++  add_executable(test_cpp_rpc ${TORCH_RPC_TEST_SOURCES})
++  target_include_directories(
++    test_cpp_rpc PRIVATE
++    ${ATen_CPU_INCLUDE})
++  target_link_libraries(test_cpp_rpc PRIVATE ${TORCH_RPC_TEST_DEPENDENCY_LIBS})
++
++  if(USE_CUDA)
++    target_link_libraries(test_cpp_rpc PRIVATE
++      ${CUDA_LIBRARIES}
++      ${CUDA_NVRTC_LIB}
++      ${CUDA_CUDA_LIB}
++      ${TORCH_CUDA_LIBRARIES})
++
++    target_compile_definitions(test_cpp_rpc PRIVATE "USE_CUDA")
++  endif()
+ 
+-if(INSTALL_TEST)
+-  install(TARGETS test_cpp_rpc DESTINATION bin)
+-  # Install PDB files for MSVC builds
+-  if(MSVC AND BUILD_SHARED_LIBS)
+-    install(FILES $<TARGET_PDB_FILE:test_cpp_rpc> DESTINATION bin OPTIONAL)
++  if(INSTALL_TEST)
++    install(TARGETS test_cpp_rpc DESTINATION bin)
++    # Install PDB files for MSVC builds
++    if(MSVC AND BUILD_SHARED_LIBS)
++      install(FILES $<TARGET_PDB_FILE:test_cpp_rpc> DESTINATION bin OPTIONAL)
++    endif()
+   endif()
+ endif()
+diff --git a/torch/distributed/rpc/__init__.py b/torch/distributed/rpc/__init__.py
+index 77bed89e33..5dc7273434 100644
+--- a/torch/distributed/rpc/__init__.py
++++ b/torch/distributed/rpc/__init__.py
+@@ -46,20 +46,23 @@ if is_available():
+         get_rpc_timeout,
+         enable_gil_profiling,
+         RpcBackendOptions,
+-        _TensorPipeRpcBackendOptionsBase,
++        #_TensorPipeRpcBackendOptionsBase,
+         ProcessGroupRpcBackendOptions,
+         RpcAgent,
+         PyRRef,
+         ProcessGroupAgent,
+-        TensorPipeAgent,
++        #TensorPipeAgent,
+         RemoteProfilerManager,
+         WorkerInfo,
+         _DEFAULT_INIT_METHOD,
+         _DEFAULT_NUM_SEND_RECV_THREADS,
+-        _DEFAULT_NUM_WORKER_THREADS,
++        #_DEFAULT_NUM_WORKER_THREADS,
+         _UNSET_RPC_TIMEOUT,
+         _DEFAULT_RPC_TIMEOUT_SEC,
+     )  # noqa: F401
++    _TensorPipeRpcBackendOptionsBase = object
++    TensorPipeAgent = object
++    _DEFAULT_NUM_WORKER_THREADS = 16
+     from torch._C._distributed_c10d import Store
+     from .api import *  # noqa: F401
+     from .options import TensorPipeRpcBackendOptions  # noqa: F401
+diff --git a/torch/distributed/rpc/constants.py b/torch/distributed/rpc/constants.py
+index e6d79e6e59..e5bd669e7e 100644
+--- a/torch/distributed/rpc/constants.py
++++ b/torch/distributed/rpc/constants.py
+@@ -3,12 +3,12 @@ from datetime import timedelta
+ from torch._C._distributed_rpc import (
+     _DEFAULT_INIT_METHOD,
+     _DEFAULT_NUM_SEND_RECV_THREADS,
+-    _DEFAULT_NUM_WORKER_THREADS,
++    #_DEFAULT_NUM_WORKER_THREADS,
+     _DEFAULT_RPC_TIMEOUT_SEC,
+     _UNSET_RPC_TIMEOUT,
  )
  
- if(USE_GLOO)
+-
++_DEFAULT_NUM_WORKER_THREADS = 16
+ # For any RpcAgent.
+ DEFAULT_RPC_TIMEOUT_SEC: float = _DEFAULT_RPC_TIMEOUT_SEC
+ DEFAULT_INIT_METHOD: str = _DEFAULT_INIT_METHOD
+diff --git a/torch/distributed/rpc/options.py b/torch/distributed/rpc/options.py
+index 19092c283e..ef4e92ed8e 100644
+--- a/torch/distributed/rpc/options.py
++++ b/torch/distributed/rpc/options.py
+@@ -1,4 +1,5 @@
+-from torch._C._distributed_rpc import _TensorPipeRpcBackendOptionsBase
++#from torch._C._distributed_rpc import _TensorPipeRpcBackendOptionsBase
++_TensorPipeRpcBackendOptionsBase = object
+ from . import constants as rpc_contants
+ 
+ import torch
