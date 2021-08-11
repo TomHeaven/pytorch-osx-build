@@ -1,0 +1,61 @@
+diff --git a/aten/src/ATen/test/CMakeLists.txt b/aten/src/ATen/test/CMakeLists.txt
+index 24ab67da50..335b6e1f29 100644
+--- a/aten/src/ATen/test/CMakeLists.txt
++++ b/aten/src/ATen/test/CMakeLists.txt
+@@ -18,7 +18,7 @@ list(APPEND ATen_CPU_TEST_SRCS
+   ${CMAKE_CURRENT_SOURCE_DIR}/dlconvertor_test.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/native_test.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/scalar_tensor_test.cpp
+-  ${CMAKE_CURRENT_SOURCE_DIR}/test_parallel.cpp
++  #${CMAKE_CURRENT_SOURCE_DIR}/test_parallel.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/undefined_tensor_test.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/verify_api_visibility.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/thread_init_test.cpp
+diff --git a/caffe2/CMakeLists.txt b/caffe2/CMakeLists.txt
+index 50ebb224ce..ac3659b7fa 100644
+--- a/caffe2/CMakeLists.txt
++++ b/caffe2/CMakeLists.txt
+@@ -351,7 +351,7 @@ if(NOT INTERN_BUILD_MOBILE OR NOT BUILD_CAFFE2_MOBILE)
+     # easier to other targets that depend on this. However, in that case, by not
+     # setting the USE_TENSORPIPE compile definition, this target will just end
+     # up being empty. Downstream targets should also add a #ifdef guard.
+-    if(NOT WIN32)
++    if(NOT WIN32 AND NOT APPLE)
+       add_library(process_group_agent
+         "${TORCH_SRC_DIR}/csrc/distributed/rpc/agent_utils.cpp"
+         "${TORCH_SRC_DIR}/csrc/distributed/rpc/agent_utils.h"
+diff --git a/modules/detectron/CMakeLists.txt b/modules/detectron/CMakeLists.txt
+index 8041e71d35..705784da64 100644
+--- a/modules/detectron/CMakeLists.txt
++++ b/modules/detectron/CMakeLists.txt
+@@ -4,7 +4,11 @@ file(GLOB_RECURSE Detectron_HIP_SRCS ${CMAKE_CURRENT_SOURCE_DIR}/*.hip)
+ 
+ if(BUILD_CAFFE2_OPS)
+   if(USE_OPENMP AND OPENMP_FOUND)
+-    Set(OpenMP_link ${OpenMP_CXX_LIBRARIES})
++    if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
++      Set(OpenMP_link -Xpreprocessor -fopenmp -lomp -lgomp)
++    else()
++      Set(OpenMP_link ${OpenMP_CXX_LIBRARIES})
++    endif()
+   endif()
+ 
+   # Note(ilijar): Since Detectron ops currently have no
+diff --git a/test/cpp/api/CMakeLists.txt b/test/cpp/api/CMakeLists.txt
+index ebc3dd5192..8bf96b1fe6 100644
+--- a/test/cpp/api/CMakeLists.txt
++++ b/test/cpp/api/CMakeLists.txt
+@@ -46,7 +46,12 @@ endif()
+ 
+ add_executable(test_api ${TORCH_API_TEST_SOURCES})
+ target_include_directories(test_api PRIVATE ${ATen_CPU_INCLUDE})
+-target_link_libraries(test_api PRIVATE torch gtest)
++if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
++  target_link_libraries(test_api PRIVATE torch gtest -Xpreprocessor -fopenmp -lomp -lgomp)
++else()
++  target_link_libraries(test_api PRIVATE torch gtest)
++endif()
++
+ 
+ if(USE_CUDA)
+   target_link_libraries(test_api PRIVATE
