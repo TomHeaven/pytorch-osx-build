@@ -11,7 +11,7 @@ index 0c11507838..2559ea78ea 100644
 +set(USE_SYSTEM_NCCL ON)
 +set(USE_GLOO ON)
 +set(USE_DISTRIBUTED ON)
-+set(USE_LIBUV ON) 
++set(USE_LIBUV ON)
 +set(USE_TENSORPIPE OFF)
 +set(USE_MPI OFF)
  if(NOT LINUX AND NOT WIN32)
@@ -251,7 +251,7 @@ index 42ed41f00b..ee9280320a 100644
          _UNSET_RPC_TIMEOUT,
          _DEFAULT_RPC_TIMEOUT_SEC,
      )  # noqa: F401
-+    
++
 +    _TensorPipeRpcBackendOptionsBase = object
 +    TensorPipeAgent = object
 +    _DEFAULT_NUM_WORKER_THREADS = 16

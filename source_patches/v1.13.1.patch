@@ -1,0 +1,1666 @@
+diff --git a/.circleci/verbatim-sources/job-specs/pytorch-job-specs.yml b/.circleci/verbatim-sources/job-specs/pytorch-job-specs.yml
+new file mode 100644
+index 00000000000..7e7a2e07989
+--- /dev/null
++++ b/.circleci/verbatim-sources/job-specs/pytorch-job-specs.yml
+@@ -0,0 +1,400 @@
++jobs:
++  pytorch_linux_build:
++    <<: *pytorch_params
++    machine:
++      image: ubuntu-2004:202104-01
++    steps:
++    # See Note [Workspace for CircleCI scripts] in job-specs-setup.yml
++    - checkout
++    - calculate_docker_image_tag
++    - setup_linux_system_environment
++    - optional_merge_target_branch
++    - setup_ci_environment
++    - run:
++        name: Build
++        no_output_timeout: "1h"
++        command: |
++          set -e
++          if [[ ${BUILD_ENVIRONMENT} == *"pure_torch"* ]]; then
++            echo 'BUILD_CAFFE2=OFF' >> "${BASH_ENV}"
++          fi
++          if [[ ${BUILD_ENVIRONMENT} == *"paralleltbb"* ]]; then
++            echo 'ATEN_THREADING=TBB' >> "${BASH_ENV}"
++            echo 'USE_TBB=1' >> "${BASH_ENV}"
++          elif [[ ${BUILD_ENVIRONMENT} == *"parallelnative"* ]]; then
++            echo 'ATEN_THREADING=NATIVE' >> "${BASH_ENV}"
++          fi
++          echo "Parallel backend flags: "${PARALLEL_FLAGS}
++          # Pull Docker image and run build
++          echo "DOCKER_IMAGE: "${DOCKER_IMAGE}:${DOCKER_TAG}
++          time docker pull ${DOCKER_IMAGE}:${DOCKER_TAG} >/dev/null
++          export id=$(docker run --env-file "${BASH_ENV}" --cap-add=SYS_PTRACE --security-opt seccomp=unconfined --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -t -d -w /var/lib/jenkins ${DOCKER_IMAGE}:${DOCKER_TAG})
++
++          git submodule sync && git submodule update -q --init --recursive --depth 1 --jobs 0
++
++          docker cp /home/circleci/project/. $id:/var/lib/jenkins/workspace
++
++          export COMMAND='((echo "sudo chown -R jenkins workspace && export JOB_BASE_NAME="$CIRCLE_JOB" && cd workspace && .jenkins/pytorch/build.sh && find ${BUILD_ROOT} -type f -name "*.a" -or -name "*.o" -delete") | docker exec -u jenkins -i "$id" bash) 2>&1'
++
++          echo ${COMMAND} > ./command.sh && unbuffer bash ./command.sh | ts
++
++          # Copy dist folder back
++          docker cp $id:/var/lib/jenkins/workspace/dist /home/circleci/project/. || echo "Dist folder not found"
++
++          # Push intermediate Docker image for next phase to use
++          if [ -z "${BUILD_ONLY}" ]; then
++            # Note [Special build images]
++            # The xla build uses the same docker image as
++            # pytorch_linux_bionic_py3_6_clang9_build. In the push step, we have to
++            # distinguish between them so the test can pick up the correct image.
++            output_image=${DOCKER_IMAGE}:build-${DOCKER_TAG}-${CIRCLE_SHA1}
++            if [[ ${BUILD_ENVIRONMENT} == *"xla"* ]]; then
++              export COMMIT_DOCKER_IMAGE=$output_image-xla
++            elif [[ ${BUILD_ENVIRONMENT} == *"libtorch"* ]]; then
++              export COMMIT_DOCKER_IMAGE=$output_image-libtorch
++            elif [[ ${BUILD_ENVIRONMENT} == *"paralleltbb"* ]]; then
++              export COMMIT_DOCKER_IMAGE=$output_image-paralleltbb
++            elif [[ ${BUILD_ENVIRONMENT} == *"parallelnative"* ]]; then
++              export COMMIT_DOCKER_IMAGE=$output_image-parallelnative
++            elif [[ ${BUILD_ENVIRONMENT} == *"android-ndk-r19c-x86_64"* ]]; then
++              export COMMIT_DOCKER_IMAGE=$output_image-android-x86_64
++            elif [[ ${BUILD_ENVIRONMENT} == *"android-ndk-r19c-arm-v7a"* ]]; then
++              export COMMIT_DOCKER_IMAGE=$output_image-android-arm-v7a
++            elif [[ ${BUILD_ENVIRONMENT} == *"android-ndk-r19c-arm-v8a"* ]]; then
++              export COMMIT_DOCKER_IMAGE=$output_image-android-arm-v8a
++            elif [[ ${BUILD_ENVIRONMENT} == *"android-ndk-r19c-x86_32"* ]]; then
++              export COMMIT_DOCKER_IMAGE=$output_image-android-x86_32
++            elif [[ ${BUILD_ENVIRONMENT} == *"android-ndk-r19c-vulkan-x86_32"* ]]; then
++              export COMMIT_DOCKER_IMAGE=$output_image-android-vulkan-x86_32
++            elif [[ ${BUILD_ENVIRONMENT} == *"vulkan-linux"* ]]; then
++              export COMMIT_DOCKER_IMAGE=$output_image-vulkan
++            else
++              export COMMIT_DOCKER_IMAGE=$output_image
++            fi
++            docker commit "$id" ${COMMIT_DOCKER_IMAGE}
++            time docker push ${COMMIT_DOCKER_IMAGE}
++          fi
++    - run:
++        name: upload build & binary data
++        no_output_timeout: "5m"
++        command: |
++            cd /pytorch && export COMMIT_TIME=$(git log --max-count=1 --format=%ct || echo 0)
++            python3 -mpip install requests && \
++            SCRIBE_GRAPHQL_ACCESS_TOKEN=${SCRIBE_GRAPHQL_ACCESS_TOKEN} \
++            python3 -m tools.stats.upload_binary_size_to_scuba || exit 0
++    - store_artifacts:
++        path: /home/circleci/project/dist
++
++  pytorch_linux_test:
++    <<: *pytorch_params
++    machine:
++      image: ubuntu-2004:202104-01
++    steps:
++    # See Note [Workspace for CircleCI scripts] in job-specs-setup.yml
++    - checkout
++    - calculate_docker_image_tag
++    - setup_linux_system_environment
++    - setup_ci_environment
++    - run:
++        name: Download Docker image
++        no_output_timeout: "90m"
++        command: |
++          set -e
++          export PYTHONUNBUFFERED=1
++          if [[ "${DOCKER_IMAGE}" == *rocm3.9* ]]; then
++            export DOCKER_TAG="f3d89a32912f62815e4feaeed47e564e887dffd6"
++          fi
++          # See Note [Special build images]
++          output_image=${DOCKER_IMAGE}:build-${DOCKER_TAG}-${CIRCLE_SHA1}
++          if [[ ${BUILD_ENVIRONMENT} == *"xla"* ]]; then
++            export COMMIT_DOCKER_IMAGE=$output_image-xla
++          elif [[ ${BUILD_ENVIRONMENT} == *"libtorch"* ]]; then
++            export COMMIT_DOCKER_IMAGE=$output_image-libtorch
++          elif [[ ${BUILD_ENVIRONMENT} == *"paralleltbb"* ]]; then
++            export COMMIT_DOCKER_IMAGE=$output_image-paralleltbb
++          elif [[ ${BUILD_ENVIRONMENT} == *"parallelnative"* ]]; then
++            export COMMIT_DOCKER_IMAGE=$output_image-parallelnative
++          elif [[ ${BUILD_ENVIRONMENT} == *"vulkan-linux"* ]]; then
++            export COMMIT_DOCKER_IMAGE=$output_image-vulkan
++          else
++            export COMMIT_DOCKER_IMAGE=$output_image
++          fi
++          echo "DOCKER_IMAGE: "${COMMIT_DOCKER_IMAGE}
++
++          if [[ ${BUILD_ENVIRONMENT} == *"paralleltbb"* ]]; then
++            echo 'ATEN_THREADING=TBB' >> "${BASH_ENV}"
++            echo 'USE_TBB=1' >> "${BASH_ENV}"
++          elif [[ ${BUILD_ENVIRONMENT} == *"parallelnative"* ]]; then
++            echo 'ATEN_THREADING=NATIVE' >> "${BASH_ENV}"
++          fi
++          echo "Parallel backend flags: "${PARALLEL_FLAGS}
++
++          time docker pull ${COMMIT_DOCKER_IMAGE} >/dev/null
++
++          # TODO: Make this less painful
++          if [ -n "${USE_CUDA_DOCKER_RUNTIME}" ]; then
++            export id=$(docker run --env-file "${BASH_ENV}" --cap-add=SYS_PTRACE --security-opt seccomp=unconfined --gpus all --shm-size=2g -t -d -w /var/lib/jenkins ${COMMIT_DOCKER_IMAGE})
++          elif [[ ${BUILD_ENVIRONMENT} == *"rocm"* ]]; then
++            hostname
++            export id=$(docker run --env-file "${BASH_ENV}" --cap-add=SYS_PTRACE --security-opt seccomp=unconfined --shm-size=8g --ipc=host --device /dev/kfd --device /dev/dri --group-add video -t -d -w /var/lib/jenkins ${COMMIT_DOCKER_IMAGE})
++          else
++            export id=$(docker run --env-file "${BASH_ENV}" --cap-add=SYS_PTRACE --security-opt seccomp=unconfined --shm-size=1g --ipc=host -t -d -w /var/lib/jenkins ${COMMIT_DOCKER_IMAGE})
++          fi
++          echo "id=${id}" >> "${BASH_ENV}"
++
++    - run:
++        name: Check for no AVX instruction by default
++        no_output_timeout: "20m"
++        command: |
++          set -e
++          is_vanilla_build() {
++            if [ "${BUILD_ENVIRONMENT}" == "pytorch-linux-bionic-py3.6-clang9-test" ]; then
++              return 0
++            fi
++            if [ "${BUILD_ENVIRONMENT}" == "pytorch-linux-xenial-py3.6-gcc5.4-test" ]; then
++              return 0
++            fi
++            return 1
++          }
++
++          if is_vanilla_build; then
++            echo "apt-get update || apt-get install libgnutls30" | docker exec -u root -i "$id" bash
++            echo "apt-get install -y qemu-user gdb" | docker exec -u root -i "$id" bash
++            echo "cd workspace/build; qemu-x86_64 -g 2345 -cpu Broadwell -E ATEN_CPU_CAPABILITY=default ./bin/basic --gtest_filter=BasicTest.BasicTestCPU & gdb ./bin/basic -ex 'set pagination off' -ex 'target remote :2345' -ex 'continue' -ex 'bt' -ex='set confirm off' -ex 'quit \$_isvoid(\$_exitcode)'" | docker exec -u jenkins -i "$id" bash
++          else
++            echo "Skipping for ${BUILD_ENVIRONMENT}"
++          fi
++    - run:
++        name: Test
++        no_output_timeout: "90m"
++        command: |
++          set -e
++
++          cat >docker_commands.sh \<<EOL
++          # =================== The following code will be executed inside Docker container ===================
++          set -ex
++          export SCRIBE_GRAPHQL_ACCESS_TOKEN="${SCRIBE_GRAPHQL_ACCESS_TOKEN}"
++          export JOB_BASE_NAME="$CIRCLE_JOB"
++          # temporary fix for https://github.com/pytorch/pytorch/issues/60746
++          if [ -z "$CIRCLE_PR_NUMBER" ]; then
++            if [[ $CIRCLE_BRANCH =~ .*pull.* ]]; then
++              export PR_NUMBER="$(echo $CIRCLE_BRANCH | sed 's/[^0-9]//g')"
++              export CIRCLE_PR_NUMBER="$PR_NUMBER"
++            fi
++          else
++            export PR_NUMBER="$CIRCLE_PR_NUMBER"
++          fi
++          ${PARALLEL_FLAGS}
++          cd workspace
++          EOL
++          if [[ ${BUILD_ENVIRONMENT} == *"multigpu"* ]]; then
++            echo ".jenkins/pytorch/multigpu-test.sh" >> docker_commands.sh
++          elif [[ ${BUILD_ENVIRONMENT} == *onnx* ]]; then
++            echo "pip install click mock tabulate networkx==2.0" >> docker_commands.sh
++            echo "pip -q install --user \"file:///var/lib/jenkins/workspace/third_party/onnx#egg=onnx\"" >> docker_commands.sh
++            echo ".jenkins/caffe2/test.sh" >> docker_commands.sh
++          else
++            echo ".jenkins/pytorch/test.sh" >> docker_commands.sh
++          fi
++          echo "(cat docker_commands.sh | docker exec -u jenkins -i "$id" bash) 2>&1" > command.sh
++          unbuffer bash command.sh | ts
++
++          if [[ ${BUILD_ENVIRONMENT} == *"coverage"* ]]; then
++              echo "Retrieving C++ coverage report"
++              docker cp $id:/var/lib/jenkins/workspace/build/coverage.info ./test
++          fi
++          if [[ ${BUILD_ENVIRONMENT} == *"coverage"* || ${BUILD_ENVIRONMENT} == *"onnx"* ]]; then
++              echo "Retrieving Python coverage report"
++              docker cp $id:/var/lib/jenkins/workspace/test/.coverage ./test
++              docker cp $id:/var/lib/jenkins/workspace/test/coverage.xml ./test
++              python3 -mpip install codecov
++              python3 -mcodecov
++          fi
++    - run:
++        name: Report results
++        no_output_timeout: "5m"
++        command: |
++          set -e
++          # Retrieving test results should be done as very first step as command never fails
++          # But is always executed if previous step fails for some reason
++          echo "Retrieving test reports"
++          docker cp $id:/var/lib/jenkins/workspace/test/test-reports ./ || echo 'No test reports found!'
++          docker stats --all --no-stream
++
++          cat >docker_commands.sh \<<EOL
++          # =================== The following code will be executed inside Docker container ===================
++          set -ex
++          export BUILD_ENVIRONMENT=${BUILD_ENVIRONMENT}
++          export SCRIBE_GRAPHQL_ACCESS_TOKEN="${SCRIBE_GRAPHQL_ACCESS_TOKEN}"
++          export CIRCLE_TAG="${CIRCLE_TAG:-}"
++          export CIRCLE_SHA1="$CIRCLE_SHA1"
++          export CIRCLE_PR_NUMBER="${CIRCLE_PR_NUMBER:-}"
++          export CIRCLE_BRANCH="$CIRCLE_BRANCH"
++          export JOB_BASE_NAME="$CIRCLE_JOB"
++          export CIRCLE_WORKFLOW_ID="$CIRCLE_WORKFLOW_ID"
++          cd workspace
++          python -m tools.stats.print_test_stats --upload-to-s3 --compare-with-s3 test
++          EOL
++          echo "(cat docker_commands.sh | docker exec -u jenkins -e LANG=C.UTF-8 -i "$id" bash) 2>&1" > command.sh
++          unbuffer bash command.sh | ts
++        when: always
++    - store_test_results:
++        path: test-reports
++    - store_artifacts:
++        path: test/.coverage
++    - store_artifacts:
++        path: test/coverage.xml
++
++  pytorch_windows_build:
++    <<: *pytorch_windows_params
++    parameters:
++      executor:
++        type: string
++        default: "windows-xlarge-cpu-with-nvidia-cuda"
++      build_environment:
++        type: string
++        default: ""
++      test_name:
++        type: string
++        default: ""
++      cuda_version:
++        type: string
++        default: "10.1"
++      python_version:
++        type: string
++        default: "3.8"
++      vs_version:
++        type: string
++        default: "16.8.6"
++      vc_version:
++        type: string
++        default: "14.16"
++      vc_year:
++        type: string
++        default: "2019"
++      vc_product:
++        type: string
++        default: "BuildTools"
++      use_cuda:
++        type: string
++        default: ""
++    executor: <<parameters.executor>>
++    steps:
++      - checkout
++      - run:
++          name: Install VS2019 toolchain
++          no_output_timeout: 10m
++          command: |
++              powershell .circleci/scripts/vs_install.ps1
++      - run:
++          name: Install Cuda
++          no_output_timeout: 30m
++          command: |
++            if [[ "${USE_CUDA}" == "1" ]]; then
++              .circleci/scripts/windows_cuda_install.sh
++            fi
++      - run:
++          name: Install Cudnn
++          command : |
++            if [[ "${USE_CUDA}" == "1" ]]; then
++              .circleci/scripts/windows_cudnn_install.sh
++            fi
++      - run:
++          name: Build
++          no_output_timeout: "90m"
++          command: |
++            set -e
++            set +x
++            export AWS_ACCESS_KEY_ID=${CIRCLECI_AWS_ACCESS_KEY_FOR_WIN_BUILD_V1}
++            export AWS_SECRET_ACCESS_KEY=${CIRCLECI_AWS_SECRET_KEY_FOR_WIN_BUILD_V1}
++            set -x
++            .jenkins/pytorch/win-build.sh
++      - persist_to_workspace:
++          root: "C:/w"
++          paths: build-results
++      - store_artifacts:
++          path: C:/w/build-results
++
++  pytorch_windows_test:
++    <<: *pytorch_windows_params
++    parameters:
++      executor:
++        type: string
++        default: "windows-medium-cpu-with-nvidia-cuda"
++      build_environment:
++        type: string
++        default: ""
++      test_name:
++        type: string
++        default: ""
++      cuda_version:
++        type: string
++        default: "10.1"
++      python_version:
++        type: string
++        default: "3.8"
++      vs_version:
++        type: string
++        default: "16.8.6"
++      vc_version:
++        type: string
++        default: "14.16"
++      vc_year:
++        type: string
++        default: "2019"
++      vc_product:
++        type: string
++        default: "BuildTools"
++      use_cuda:
++        type: string
++        default: ""
++    executor: <<parameters.executor>>
++    steps:
++      - checkout
++      - attach_workspace:
++          at: c:/users/circleci/workspace
++      - run:
++          name: Install VS2019 toolchain
++          no_output_timeout: 10m
++          command: |
++              powershell .circleci/scripts/vs_install.ps1
++      - run:
++          name: Install Cuda
++          no_output_timeout: 30m
++          command: |
++            if [[ "${CUDA_VERSION}" != "cpu" ]]; then
++              if [[ "${CUDA_VERSION}" != "10" || "${JOB_EXECUTOR}" != "windows-with-nvidia-gpu" ]]; then
++                .circleci/scripts/windows_cuda_install.sh
++              fi
++            fi
++      - run:
++          name: Install Cudnn
++          command : |
++            if [[ "${CUDA_VERSION}" != "cpu" ]]; then
++              .circleci/scripts/windows_cudnn_install.sh
++            fi
++      - run:
++          name: Test
++          no_output_timeout: "30m"
++          command: |
++            set -e
++            export IN_CI=1
++            set +x
++            export AWS_ACCESS_KEY_ID=${CIRCLECI_AWS_ACCESS_KEY_FOR_WIN_BUILD_V1}
++            export AWS_SECRET_ACCESS_KEY=${CIRCLECI_AWS_SECRET_KEY_FOR_WIN_BUILD_V1}
++            set -x
++            .jenkins/pytorch/win-test.sh
++      - run:
++          name: Report results
++          no_output_timeout: "5m"
++          command: |
++            set -ex
++            export AWS_ACCESS_KEY_ID=${CIRCLECI_AWS_ACCESS_KEY_FOR_WIN_BUILD_V1}
++            export AWS_SECRET_ACCESS_KEY=${CIRCLECI_AWS_SECRET_KEY_FOR_WIN_BUILD_V1}
++            pip install typing_extensions boto3
++            python -m tools.stats.print_test_stats --upload-to-s3 --compare-with-s3 test
++          when: always
++      - store_test_results:
++          path: test/test-reports
++      - store_artifacts:
++          path: test/coverage.xml
+diff --git a/.jenkins/pytorch/test.sh b/.jenkins/pytorch/test.sh
+index df416a58332..6440bcba252 100755
+--- a/.jenkins/pytorch/test.sh
++++ b/.jenkins/pytorch/test.sh
+@@ -554,9 +554,6 @@ test_forward_backward_compatibility() {
+   python -m venv venv
+   # shellcheck disable=SC1091
+   . venv/bin/activate
+-
+-  # build torch at the base commit to generate a base function schema for comparison
+-  git reset --hard "${SHA_TO_COMPARE}"
+   echo "::group::Installing Torch From Base Commit"
+   pip install -r requirements.txt
+   # shellcheck source=./common-build.sh
+@@ -569,7 +566,6 @@ test_forward_backward_compatibility() {
+   pip show torch
+   python dump_all_function_schemas.py --filename nightly_schemas.txt
+ 
+-  git reset --hard "${SHA1}"
+   # FC: verify new model can be load with old code.
+   if ! python ../load_torchscript_model.py /tmp/model_new.pt; then
+       echo "FC check failed: new model cannot be load in old code"
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index e2e1f69457e..1f55d9815d0 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -142,8 +142,16 @@ endif()
+ 
+ # For non-supported platforms, turn USE_DISTRIBUTED off by default.
+ # It is not tested and likely won't work without additional changes.
++# Enable  NCCL and Gloo
++set(USE_NCCL ON)
++set(USE_SYSTEM_NCCL ON)
++set(USE_GLOO ON)
++set(USE_DISTRIBUTED ON)
++set(USE_LIBUV ON)
++set(USE_TENSORPIPE OFF)
++set(USE_MPI OFF)
+ if(NOT LINUX AND NOT WIN32)
+-  set(USE_DISTRIBUTED OFF CACHE STRING "Use distributed")
++  #set(USE_DISTRIBUTED OFF CACHE STRING "Use distributed")
+   # On macOS, if USE_DISTRIBUTED is enabled (specified by the user),
+   # then make Gloo build with the libuv transport.
+   if(APPLE AND USE_DISTRIBUTED)
+@@ -231,7 +239,7 @@ cmake_dependent_option(
+     "MPS_FOUND" OFF)
+ cmake_dependent_option(
+     USE_NCCL "Use NCCL" ON
+-    "USE_CUDA OR USE_ROCM;UNIX;NOT APPLE" OFF)
++    "USE_CUDA OR USE_ROCM;UNIX" OFF)
+ cmake_dependent_option(USE_RCCL "Use RCCL" ON
+     USE_NCCL OFF)
+ cmake_dependent_option(
+@@ -355,7 +363,6 @@ cmake_dependent_option(
+ cmake_dependent_option(
+     BUILD_FUNCTORCH "Build Functorch" ON "BUILD_PYTHON" OFF)
+ 
+-
+ if(USE_CCACHE)
+   find_program(CCACHE_PROGRAM ccache)
+   if(CCACHE_PROGRAM)
+diff --git a/aten/src/ATen/NumericUtils.h b/aten/src/ATen/NumericUtils.h
+index 816cc4e8a44..9b614cdcc66 100644
+--- a/aten/src/ATen/NumericUtils.h
++++ b/aten/src/ATen/NumericUtils.h
+@@ -31,7 +31,7 @@ inline C10_HOST_DEVICE bool _isnan(T val) {
+ #if defined(__CUDACC__) || defined(__HIPCC__)
+   return ::isnan(val);
+ #else
+-  return std::isnan(val);
++  return std::isnan(double(val));
+ #endif
+ }
+ 
+diff --git a/aten/src/ATen/cuda/detail/LazyNVRTC.cpp b/aten/src/ATen/cuda/detail/LazyNVRTC.cpp
+index 0e75c1842cb..88212f5f875 100644
+--- a/aten/src/ATen/cuda/detail/LazyNVRTC.cpp
++++ b/aten/src/ATen/cuda/detail/LazyNVRTC.cpp
+@@ -12,6 +12,8 @@ namespace _stubs {
+ at::DynamicLibrary& getCUDALibrary() {
+ #if defined(_WIN32)
+   static at::DynamicLibrary lib("nvcuda.dll");
++#elif defined(__APPLE__)
++  static at::DynamicLibrary lib("libcuda.dylib");
+ #else
+   static at::DynamicLibrary lib("libcuda.so.1");
+ #endif
+diff --git a/aten/src/ATen/native/AdaptiveMaxPooling3d.cpp b/aten/src/ATen/native/AdaptiveMaxPooling3d.cpp
+index a293d12599b..587785e17eb 100644
+--- a/aten/src/ATen/native/AdaptiveMaxPooling3d.cpp
++++ b/aten/src/ATen/native/AdaptiveMaxPooling3d.cpp
+@@ -135,7 +135,7 @@ static void adaptive_max_pool3d_single_out_frame(
+                 for(iw = 0; iw < kW; iw++)
+                 {
+                   scalar_t val = *(ip + it*istrideT + ih*istrideH + iw*istrideW);
+-                  if ((val > maxval) || std::isnan(val))
++                  if ((val > maxval) || std::isnan(double(val)))
+                   {
+                     maxval = val;
+                     maxindex = (it+istartT)*isizeH*isizeW + (ih+istartH)*isizeW + (iw+istartW);
+diff --git a/aten/src/ATen/native/DilatedMaxPool3d.cpp b/aten/src/ATen/native/DilatedMaxPool3d.cpp
+index 57fa6f9ea69..05d89bc3dc2 100644
+--- a/aten/src/ATen/native/DilatedMaxPool3d.cpp
++++ b/aten/src/ATen/native/DilatedMaxPool3d.cpp
+@@ -83,7 +83,7 @@ static void max_pool3d_with_indices_single_out_frame(
+                 {
+                   int64_t index = z * iwidth * iheight + y * iwidth + x;
+                   scalar_t val = ip[index];
+-                  if ((val > maxval) || std::isnan(val))
++                  if ((val > maxval) || std::isnan(double(val)))
+                   {
+                     maxval = val;
+                     maxindex = index;
+diff --git a/aten/src/ATen/native/FractionalMaxPool2d.cpp b/aten/src/ATen/native/FractionalMaxPool2d.cpp
+index b4f8207af04..f33907ba779 100644
+--- a/aten/src/ATen/native/FractionalMaxPool2d.cpp
++++ b/aten/src/ATen/native/FractionalMaxPool2d.cpp
+@@ -186,7 +186,7 @@ static void fractional_max_pool2d_out_single_batch_frame(
+ 
+               int planeIndex = h2 * inputW + w2;
+               scalar_t val = inputForPlane[planeIndex];
+-              if (val > maxVal || std::isnan(val)) {
++              if (val > maxVal || std::isnan(double(val))) {
+                 maxVal = val;
+                 maxIndex = planeIndex;
+               }
+diff --git a/aten/src/ATen/native/FractionalMaxPool3d.cpp b/aten/src/ATen/native/FractionalMaxPool3d.cpp
+index 11769545090..6b378cdbc05 100644
+--- a/aten/src/ATen/native/FractionalMaxPool3d.cpp
++++ b/aten/src/ATen/native/FractionalMaxPool3d.cpp
+@@ -167,7 +167,7 @@ static void fractional_max_pool3d_out_single_batch_frame(
+ 
+                   int64_t planeIndex = t2 * inputH * inputW + h2 * inputW + w2;
+                   scalar_t val = inputForPlane[planeIndex];
+-                  if (val > maxVal || std::isnan(val)) {
++                  if (val > maxVal || std::isnan(double(val))) {
+                     maxVal = val;
+                     maxIndex = planeIndex;
+                   }
+diff --git a/aten/src/ATen/native/ReduceOps.cpp b/aten/src/ATen/native/ReduceOps.cpp
+index 97aeb44951d..85a6863a867 100644
+--- a/aten/src/ATen/native/ReduceOps.cpp
++++ b/aten/src/ATen/native/ReduceOps.cpp
+@@ -25,6 +25,7 @@
+ #include <numeric>
+ #include <vector>
+ #include <map>
++#include <iostream>
+ #include <cmath>
+ #include <cfloat>
+ #include <type_traits>
+@@ -676,6 +677,43 @@ template<typename T>
+ inline typename std::enable_if<!std::is_integral<T>::value, bool>::type isnan_(T x) {
+   return std::isnan(x);
+ }
++#elif __APPLE__
++// TODO: This the a workaround, which need furthur fix.
++/**
++ ../aten/src/ATen/native/ReduceOps.cpp:634:10: error: no matching function for call to 'isnan'
++  return std::isnan(x);
++         ^~~~~~~~~~
++../aten/src/ATen/native/ReduceOps.cpp:652:12: note: in instantiation of function template specialization 'at::native::(anonymous namespace)::isnan_<c10::BFloat16>' requested here
++        if(isnan_(curr_elem) || (!isnan_(out) && op(curr_elem, out))) {
++           ^
++../aten/src/ATen/native/ReduceOps.cpp:665:84: note: in instantiation of function template specialization 'at::native::cummax_cummin_helper<c10::BFloat16, long long, std::__1::greater_equal<c10::BFloat16> >' requested here
++      at::native::tensor_dim_apply3<scalar_t, int64_t>(self, values, indices, dim, cummax_cummin_helper<scalar_t, int64_t, std::greater_equal<scalar_t>>);
++                                                                                   ^
++/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/math.h:505:1: note: candidate template ignored: requirement 'std::is_floating_point<BFloat16>::value' was not satisfied [with _A1 = c10::BFloat16]
++isnan(_A1 __lcpp_x) _NOEXCEPT
++^
++/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/math.h:513:1: note: candidate template ignored: requirement 'std::is_integral<BFloat16>::value' was not satisfied [with _A1 = c10::BFloat16]
++isnan(_A1) _NOEXCEPT
++^
++../aten/src/ATen/native/ReduceOps.cpp:652:12: error: no matching function for call to 'isnan_'
++        if(isnan_(curr_elem) || (!isnan_(out) && op(curr_elem, out))) {
++           ^~~~~~
++../aten/src/ATen/native/ReduceOps.cpp:700:84: note: in instantiation of function template specialization 'at::native::cummax_cummin_helper<c10::BFloat16, long long, std::__1::less_equal<c10::BFloat16> >' requested here
++      at::native::tensor_dim_apply3<scalar_t, int64_t>(self, values, indices, dim, cummax_cummin_helper<scalar_t, int64_t, std::less_equal<scalar_t>>);
++                                                                                   ^
++../aten/src/ATen/native/ReduceOps.cpp:629:72: note: candidate template ignored: requirement 'std::is_integral<BFloat16>::value' was not satisfied [with T = c10::BFloat16]
++inline typename std::enable_if<std::is_integral<T>::value, bool>::type isnan_(T x) {
++                                                                       ^
++../aten/src/ATen/native/ReduceOps.cpp:633:73: note: candidate template ignored: substitution failure [with T = c10::BFloat16]
++inline typename std::enable_if<!std::is_integral<T>::value, bool>::type isnan_(T x) {
++                                                                        ^
++2 errors generated.
++ */
++template<typename T>
++inline bool isnan_(T x) {
++  //return std::isnan(x);
++  return false;
++}
+ #else
+ template<typename T>
+ inline bool isnan_(T x) {
+diff --git a/aten/src/ATen/native/cpu/AdaptiveMaxPoolKernel.cpp b/aten/src/ATen/native/cpu/AdaptiveMaxPoolKernel.cpp
+index 3f4038685da..65601897f6e 100644
+--- a/aten/src/ATen/native/cpu/AdaptiveMaxPoolKernel.cpp
++++ b/aten/src/ATen/native/cpu/AdaptiveMaxPoolKernel.cpp
+@@ -56,7 +56,7 @@ void cpu_adaptive_max_pool(
+             for (int64_t iw = iw0; iw < iw1; iw ++) {
+               int64_t index = ih * input_width + iw;
+               scalar_t val = input_ptr[index];
+-              if ((val > maxval) || std::isnan(val)) {
++              if ((val > maxval) || std::isnan(double(val))) {
+                 maxval = val;
+                 maxindex = index;
+               }
+@@ -173,7 +173,7 @@ void cpu_adaptive_max_pool_channels_last(
+             int64_t maxindex = ind[d2];
+             scalar_t maxval = out[d2];
+ 
+-            bool mask = (val > maxval) || std::isnan(val);
++            bool mask = (val > maxval) || std::isnan(double(val));
+             out[d2] = mask ? val : maxval;
+             ind[d2] = mask ? index : maxindex;
+           }
+@@ -302,7 +302,7 @@ void cpu_adaptive_max_pool_channels_last<BFloat16>(
+             int64_t maxindex = ind[d2];
+             float maxval = max[d2];
+ 
+-            bool mask = (val > maxval) || std::isnan(val);
++            bool mask = (val > maxval) || std::isnan(double(val));
+             max[d2] = mask ? val : maxval;
+             ind[d2] = mask ? index : maxindex;
+           }
+diff --git a/aten/src/ATen/native/cpu/MaxPoolKernel.cpp b/aten/src/ATen/native/cpu/MaxPoolKernel.cpp
+index a2e7736a4a8..d4b79437a89 100644
+--- a/aten/src/ATen/native/cpu/MaxPoolKernel.cpp
++++ b/aten/src/ATen/native/cpu/MaxPoolKernel.cpp
+@@ -64,7 +64,7 @@ void cpu_max_pool(
+         for (int64_t iw = iw0; iw < iw1; iw += dilationW) {
+           int64_t index = ih * input_width + iw;
+           accscalar_t val = accscalar_t(input_ptr[index]);
+-          if ((val > maxval) || std::isnan(val)) {
++          if ((val > maxval) || std::isnan(double(val))) {
+             maxval = val;
+             maxindex = index;
+           }
+@@ -187,7 +187,7 @@ void cpu_max_pool_channels_last(
+             int64_t maxindex = ind[d2];
+             scalar_t maxval = out[d2];
+ 
+-            bool mask = (val > maxval) || std::isnan(val);
++            bool mask = (val > maxval) || std::isnan(double(val));
+             out[d2] = mask ? val : maxval;
+             ind[d2] = mask ? index : maxindex;
+           }
+@@ -320,7 +320,7 @@ void cpu_max_pool_channels_last<BFloat16>(
+             int64_t maxindex = ind[d2];
+             float maxval = max[d2];
+ 
+-            bool mask = (val > maxval) || std::isnan(val);
++            bool mask = (val > maxval) || std::isnan(double(val));
+             max[d2] = mask ? val : maxval;
+             ind[d2] = mask ? index : maxindex;
+           }
+diff --git a/aten/src/ATen/native/cpu/MaxPooling.cpp b/aten/src/ATen/native/cpu/MaxPooling.cpp
+index 06d0fe50142..32460db237c 100644
+--- a/aten/src/ATen/native/cpu/MaxPooling.cpp
++++ b/aten/src/ATen/native/cpu/MaxPooling.cpp
+@@ -22,7 +22,7 @@ inline void max_pool1d_kernel(
+     int64_t ij = p.index(kj, oj);
+     for (; oj < oe; ++oj, ij += p.SJ) {
+       scalar_t val = ip[ij];
+-      bool update_max = std::isnan(val) || op[oj] < val;
++      bool update_max = std::isnan(double(val)) || op[oj] < val;
+       op[oj] = update_max ? val : op[oj];
+     }
+   }
+diff --git a/aten/src/ATen/native/cuda/EmbeddingBag.cu b/aten/src/ATen/native/cuda/EmbeddingBag.cu
+index 2cd76cbe34d..c8dd507beec 100644
+--- a/aten/src/ATen/native/cuda/EmbeddingBag.cu
++++ b/aten/src/ATen/native/cuda/EmbeddingBag.cu
+@@ -178,7 +178,7 @@ Tensor embedding_bag_backward_cuda_sum_avg(
+                                    int64_t padding_idx) {
+   auto indices = indices_.contiguous();
+ 
+-  ptrdiff_t num_indices = indices.numel();
++  int64_t num_indices = indices.numel();
+ 
+   if (num_indices == 0) {
+     // all empty bags
+diff --git a/c10/util/safe_numerics.h b/c10/util/safe_numerics.h
+index 7eb9ed39395..865d747ea30 100644
+--- a/c10/util/safe_numerics.h
++++ b/c10/util/safe_numerics.h
+@@ -12,7 +12,7 @@
+ #include <c10/util/llvmMathExtras.h>
+ #include <intrin.h>
+ #else
+-#define C10_HAS_BUILTIN_OVERFLOW() (1)
++#define C10_HAS_BUILTIN_OVERFLOW() (0)
+ #endif
+ 
+ namespace c10 {
+@@ -21,8 +21,9 @@ C10_ALWAYS_INLINE bool add_overflows(uint64_t a, uint64_t b, uint64_t* out) {
+ #if C10_HAS_BUILTIN_OVERFLOW()
+   return __builtin_add_overflow(a, b, out);
+ #else
+-  unsigned long long tmp;
+-  auto carry = _addcarry_u64(0, a, b, &tmp);
++  unsigned long long tmp = a + b;
++  unsigned long long vector = (a & b) ^ ((a ^ b) & ~tmp);
++  auto carry = vector >> 63;
+   *out = tmp;
+   return carry;
+ #endif
+diff --git a/cmake/Dependencies.cmake b/cmake/Dependencies.cmake
+index 49b7fd5025b..0024f34c017 100644
+--- a/cmake/Dependencies.cmake
++++ b/cmake/Dependencies.cmake
+@@ -1359,8 +1359,8 @@ if(USE_NCCL)
+         "Not using CUDA/ROCM, so disabling USE_NCCL. Suppress this warning with "
+         "-DUSE_NCCL=OFF.")
+     caffe2_update_option(USE_NCCL OFF)
+-  elseif(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+-    message(WARNING "NCCL is currently only supported under Linux.")
++  elseif(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
++    message(WARNING "NCCL is currently only supported under Linux and macOS.")
+     caffe2_update_option(USE_NCCL OFF)
+   elseif(USE_CUDA)
+     include(${CMAKE_CURRENT_LIST_DIR}/External/nccl.cmake)
+diff --git a/cmake/public/cuda.cmake b/cmake/public/cuda.cmake
+index 0f5ed3b3fcd..db2245a97a2 100644
+--- a/cmake/public/cuda.cmake
++++ b/cmake/public/cuda.cmake
+@@ -51,8 +51,8 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+ message(STATUS "Caffe2: CUDA detected: " ${CUDA_VERSION})
+ message(STATUS "Caffe2: CUDA nvcc is: " ${CUDA_NVCC_EXECUTABLE})
+ message(STATUS "Caffe2: CUDA toolkit directory: " ${CUDA_TOOLKIT_ROOT_DIR})
+-if(CUDA_VERSION VERSION_LESS 10.2)
+-  message(FATAL_ERROR "PyTorch requires CUDA 10.2 or above.")
++if(CUDA_VERSION VERSION_LESS 10.1)
++  message(FATAL_ERROR "PyTorch requires CUDA 10.1 or above.")
+ endif()
+ 
+ if(CUDA_FOUND)
+diff --git a/ios/TestApp/AppleWWDRCAG3.cer b/ios/TestApp/AppleWWDRCAG3.cer
+new file mode 100644
+index 00000000000..32f96f81dd6
+Binary files /dev/null and b/ios/TestApp/AppleWWDRCAG3.cer differ
+diff --git a/modules/detectron/CMakeLists.txt b/modules/detectron/CMakeLists.txt
+index 46276114c5e..50d011db18c 100644
+--- a/modules/detectron/CMakeLists.txt
++++ b/modules/detectron/CMakeLists.txt
+@@ -4,7 +4,11 @@ file(GLOB_RECURSE Detectron_HIP_SRCS ${CMAKE_CURRENT_SOURCE_DIR}/*.hip)
+ 
+ if(BUILD_CAFFE2_OPS)
+   if(USE_OPENMP AND OPENMP_FOUND)
+-    Set(OpenMP_link ${OpenMP_CXX_LIBRARIES})
++    if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
++      Set(OpenMP_link -Xpreprocessor -fopenmp -lomp -lgomp)
++    else()
++      Set(OpenMP_link ${OpenMP_CXX_LIBRARIES})
++    endif()
+   endif()
+ 
+   # Note(ilijar): Since Detectron ops currently have no
+diff --git a/test/cpp/api/CMakeLists.txt b/test/cpp/api/CMakeLists.txt
+index 6b801a07318..2852018034e 100644
+--- a/test/cpp/api/CMakeLists.txt
++++ b/test/cpp/api/CMakeLists.txt
+@@ -48,7 +48,13 @@ endif()
+ 
+ add_executable(test_api ${TORCH_API_TEST_SOURCES})
+ target_include_directories(test_api PRIVATE ${ATen_CPU_INCLUDE})
+-target_link_libraries(test_api PRIVATE torch gtest)
++
++if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
++  target_link_libraries(test_api PRIVATE torch gtest "-Xpreprocessor -fopenmp -lomp -lgomp")
++else()
++  target_link_libraries(test_api PRIVATE torch gtest)
++endif()
++
+ if(NOT MSVC)
+   target_compile_options_if_supported(test_api -Wno-unused-variable)
+ endif()
+diff --git a/test/cpp/rpc/CMakeLists.txt b/test/cpp/rpc/CMakeLists.txt
+index 3997f8753e5..50989d129ec 100644
+--- a/test/cpp/rpc/CMakeLists.txt
++++ b/test/cpp/rpc/CMakeLists.txt
+@@ -4,6 +4,7 @@ set(TORCH_RPC_TEST_SOURCES
+   ${TORCH_RPC_TEST_DIR}/e2e_test_base.cpp
+   ${TORCH_RPC_TEST_DIR}/test_wire_serialization.cpp
+ )
++
+ set(TORCH_RPC_TEST_DEPENDENCY_LIBS
+   torch gtest
+ )
+diff --git a/test/distributed/elastic/multiprocessing/api_test.py b/test/distributed/elastic/multiprocessing/api_test.py
+index 3b44169ae38..b9e1ced10f1 100644
+--- a/test/distributed/elastic/multiprocessing/api_test.py
++++ b/test/distributed/elastic/multiprocessing/api_test.py
+@@ -32,11 +32,7 @@ from torch.distributed.elastic.multiprocessing.api import (
+ )
+ from torch.distributed.elastic.multiprocessing.errors import ErrorHandler
+ from torch.testing._internal.common_utils import (
+-    IS_CI,
+-    IS_MACOS,
+-    IS_WINDOWS,
+     NO_MULTIPROCESSING_SPAWN,
+-    TEST_WITH_ASAN,
+     TEST_WITH_DEV_DBG_ASAN,
+     TEST_WITH_TSAN,
+     TestCase,
+diff --git a/test/jit/test_onnx_export.py b/test/jit/test_onnx_export.py
+new file mode 100644
+index 00000000000..b999a1ee0b8
+--- /dev/null
++++ b/test/jit/test_onnx_export.py
+@@ -0,0 +1,356 @@
++import io
++import os
++import sys
++import typing
++
++import torch
++import torch.nn as nn
++
++# Make the helper files in test/ importable
++pytorch_test_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
++sys.path.append(pytorch_test_dir)
++from torch.testing._internal.common_utils import suppress_warnings
++from torch.testing._internal.jit_utils import JitTestCase
++from torch.onnx import OperatorExportTypes
++
++if __name__ == '__main__':
++    raise RuntimeError("This test file is not meant to be run directly, use:\n\n"
++                       "\tpython test/test_jit.py TESTNAME\n\n"
++                       "instead.")
++
++class TestONNXExport(JitTestCase):
++    def test_fuse_addmm(self):
++        class AddmmModel(torch.nn.Module):
++            def forward(self, x):
++                return torch.mm(x, x) + x
++
++        x = torch.ones(3, 3)
++        f = io.BytesIO()
++        torch.onnx._export(AddmmModel(), x, f, verbose=False)
++
++    def test_onnx_transpose_incomplete_tensor_type(self):
++        # Smoke test to get us into the state where we are attempting to export
++        # a transpose op, where the input is a TensorType without size information.
++        # This would previously not work, since we would
++        # take the size of the input and use the length of its sizes as the
++        # number of dimensions in the permutation.
++        class Foo(torch.jit.ScriptModule):
++            @torch.jit.script_method
++            def forward(self, x):
++                return x.contiguous().transpose(0, 1).sum()
++
++        class TraceMe(torch.nn.Module):
++            def __init__(self):
++                super(TraceMe, self).__init__()
++                self.foo = Foo()
++
++            def forward(self, x):
++                return self.foo(x)
++
++        tm = TraceMe()
++        tm = torch.jit.trace(tm, torch.rand(3, 4))
++        f = io.BytesIO()
++        torch.onnx._export(tm, (torch.rand(3, 4),), f)
++
++    def test_export_tensoroption_to(self):
++        def foo(x):
++            return x[0].clone().detach().cpu() + x
++
++        traced = torch.jit.trace(foo, (torch.rand([2])))
++
++        f = io.BytesIO()
++        torch.onnx._export_to_pretty_string(traced, (torch.rand([2]),), f)
++
++    def test_onnx_export_script_module(self):
++        class ModuleToExport(torch.jit.ScriptModule):
++            def __init__(self):
++                super(ModuleToExport, self).__init__()
++
++            @torch.jit.script_method
++            def forward(self, x):
++                y = x - x
++                return x + x
++
++        mte = ModuleToExport()
++        torch.onnx.export_to_pretty_string(
++            mte, (torch.zeros(1, 2, 3),), None, verbose=False)
++
++    @suppress_warnings
++    def test_onnx_export_func_with_warnings(self):
++        @torch.jit.script
++        def func_with_warning(inp):
++            return torch.nn.functional.sigmoid(inp)  # triggers a deprecation warning
++
++        class WarningTest(torch.nn.Module):
++            def __init__(self):
++                super(WarningTest, self).__init__()
++
++            def forward(self, x):
++                return func_with_warning(x)
++
++        # no exception
++        torch.onnx.export_to_pretty_string(
++            WarningTest(), torch.randn(42), None, verbose=False)
++
++    def test_onnx_export_script_python_fail(self):
++        class PythonModule(torch.jit.ScriptModule):
++            def __init__(self):
++                super(PythonModule, self).__init__()
++
++            @torch.jit.ignore
++            def forward(self, x):
++                return torch.neg(x)
++
++        class ModuleToExport(torch.jit.ScriptModule):
++            def __init__(self):
++                super(ModuleToExport, self).__init__()
++                self.mod = PythonModule()
++
++            @torch.jit.script_method
++            def forward(self, x):
++                y = self.mod(x)
++                return y + y
++
++        mte = ModuleToExport()
++        f = io.BytesIO()
++        with self.assertRaisesRegex(RuntimeError, "Couldn't export Python"):
++            torch.onnx._export(mte, (torch.zeros(1, 2, 3),), f, verbose=False)
++
++    def test_onnx_export_script_inline_trace(self):
++        class ModuleToInline(torch.nn.Module):
++            def __init__(self):
++                super(ModuleToInline, self).__init__()
++
++            def forward(self, x):
++                return torch.neg(x)
++
++        class ModuleToExport(torch.jit.ScriptModule):
++            def __init__(self):
++                super(ModuleToExport, self).__init__()
++                self.mod = torch.jit.trace(ModuleToInline(), torch.zeros(1, 2, 3))
++
++            @torch.jit.script_method
++            def forward(self, x):
++                y = self.mod(x)
++                return y + y
++
++        mte = ModuleToExport()
++        torch.onnx.export_to_pretty_string(
++            mte, (torch.zeros(1, 2, 3),), None, verbose=False)
++
++    def test_onnx_export_script_inline_script(self):
++        class ModuleToInline(torch.jit.ScriptModule):
++            def __init__(self):
++                super(ModuleToInline, self).__init__()
++
++            @torch.jit.script_method
++            def forward(self, x):
++                return torch.neg(x)
++
++        class ModuleToExport(torch.jit.ScriptModule):
++            def __init__(self):
++                super(ModuleToExport, self).__init__()
++                self.mod = ModuleToInline()
++
++            @torch.jit.script_method
++            def forward(self, x):
++                y = self.mod(x)
++                return y + y
++
++        mte = ModuleToExport()
++        torch.onnx.export_to_pretty_string(
++            mte, (torch.zeros(1, 2, 3),), None, verbose=False)
++
++    def test_onnx_export_script_module_loop(self):
++        class ModuleToExport(torch.jit.ScriptModule):
++            def __init__(self):
++                super(ModuleToExport, self).__init__()
++
++            @torch.jit.script_method
++            def forward(self, x):
++                # test if we support end to end onnx export on loop and
++                # nested loops with and without loop index
++                for _ in range(5):
++                    for i in range(3):
++                        x = x + i
++                return x
++
++        mte = ModuleToExport()
++        torch.onnx.export_to_pretty_string(
++            mte, (torch.zeros(1, 2, 3),), None, verbose=False)
++
++    @suppress_warnings
++    def test_onnx_export_script_truediv(self):
++        class ModuleToExport(torch.jit.ScriptModule):
++            def __init__(self):
++                super(ModuleToExport, self).__init__()
++
++            @torch.jit.script_method
++            def forward(self, x):
++                z = x.size(0) / 2
++                return x + z
++
++        mte = ModuleToExport()
++
++        torch.onnx.export_to_pretty_string(
++            mte, (torch.zeros(1, 2, 3, dtype=torch.float),), None, verbose=False)
++
++    def test_onnx_export_script_non_alpha_add_sub(self):
++        class ModuleToExport(torch.jit.ScriptModule):
++            def __init__(self):
++                super(ModuleToExport, self).__init__()
++
++            @torch.jit.script_method
++            def forward(self, x):
++                bs = x.size(0) + 1
++                return bs - 1
++
++        mte = ModuleToExport()
++        torch.onnx.export_to_pretty_string(
++            mte, (torch.rand(3, 4),), None, verbose=False)
++
++    def test_onnx_export_script_module_if(self):
++        class ModuleToExport(torch.jit.ScriptModule):
++            def __init__(self):
++                super(ModuleToExport, self).__init__()
++
++            @torch.jit.script_method
++            def forward(self, x):
++                if bool(torch.sum(x) > 0):
++                    x = torch.neg(x)
++                return x
++
++        mte = ModuleToExport()
++        torch.onnx.export_to_pretty_string(
++            mte, (torch.zeros(1, 2, 3),), None, verbose=False)
++
++    def test_onnx_export_script_inline_params(self):
++        class ModuleToInline(torch.jit.ScriptModule):
++            def __init__(self):
++                super(ModuleToInline, self).__init__()
++                self.m = torch.nn.Parameter(torch.ones(3, 3))
++                self.unused = torch.nn.Parameter(torch.ones(1, 2, 3))
++
++            @torch.jit.script_method
++            def forward(self, x):
++                return torch.mm(x, self.m)
++
++        class ModuleToExport(torch.jit.ScriptModule):
++            def __init__(self):
++                super(ModuleToExport, self).__init__()
++                self.mod = ModuleToInline()
++                self.param = torch.nn.Parameter(torch.ones(3, 4))
++
++            @torch.jit.script_method
++            def forward(self, x):
++                y = self.mod(x)
++                return torch.mm(y, self.param)
++
++        mte = ModuleToExport()
++        result = mte(torch.zeros(2, 3))
++        reference = torch.mm(torch.mm(torch.zeros(2, 3), torch.ones(3, 3)), torch.ones(3, 4))
++        self.assertEqual(result, reference)
++        torch.onnx.export_to_pretty_string(
++            mte, (torch.ones(2, 3),), None, verbose=False)
++
++    def test_onnx_export_speculate(self):
++
++        class Foo(torch.jit.ScriptModule):
++            def __init__(self, m):
++                super(Foo, self).__init__()
++                self.m = m
++
++            @torch.jit.script_method
++            def forward(self, x):
++                x += x
++                # because we are testing if we emit `if` statement correctly
++                # we cannot use `True` as the condition. Constant prop
++                # would remove the `if` statements.
++                c = torch.sum(x) > 4
++                if bool(c):
++                    if bool(c):
++                        y = self.m(x)
++                    else:
++                        y = self.m(x)
++                else:
++                    y = self.m(x)
++                return y
++
++        linear = torch.jit.trace(nn.Linear(10, 20).float(), torch.zeros(1, 10, dtype=torch.float))
++
++        @torch.jit.script
++        def transpose(x):
++            return x.t()
++
++        f1 = Foo(transpose)
++        f2 = Foo(linear)
++
++        torch.onnx.export_to_pretty_string(
++            f1,
++            (torch.ones(1, 10, dtype=torch.float), ),
++            None, verbose=False)
++        torch.onnx.export_to_pretty_string(
++            f2,
++            (torch.ones(1, 10, dtype=torch.float), ),
++            None, verbose=False)
++
++    def test_onnx_export_shape_reshape(self):
++        class Foo(torch.nn.Module):
++            def forward(self, x):
++                import torch.onnx.operators
++                x = x.repeat(5, 1, 1)
++                shape = torch.onnx.operators.shape_as_tensor(x)
++                reshaped = torch.onnx.operators.reshape_from_tensor_shape(x, shape)
++                return reshaped
++
++        foo = torch.jit.trace(Foo(), torch.zeros(1, 2, 3))
++        f = io.BytesIO()
++        torch.onnx.export_to_pretty_string(foo, (torch.zeros(1, 2, 3)), f)
++
++    def test_listconstruct_erasure(self):
++        class FooMod(torch.nn.Module):
++            def forward(self, x):
++                mask = x < 0.0
++                return x[mask]
++
++        import io
++        f = io.BytesIO()
++        torch.onnx.export_to_pretty_string(
++            FooMod(), (torch.rand(3, 4),), f,
++            add_node_names=False,
++            do_constant_folding=False,
++            operator_export_type=OperatorExportTypes.ONNX_ATEN_FALLBACK)
++
++
++    def test_export_dynamic_slice(self):
++        class DynamicSliceExportMod(torch.jit.ScriptModule):
++            @torch.jit.script_method
++            def forward(self, x):
++                retval = x[0]
++                for i in range(x.size(1)):
++                    retval += torch.sum(x[0:i], dim=0)
++                return retval
++
++        mod = DynamicSliceExportMod()
++
++        input = torch.rand(3, 4, 5)
++
++        f = io.BytesIO()
++        torch.onnx.export_to_pretty_string(
++            DynamicSliceExportMod(), (input,), f, opset_version=10)
++
++    def test_export_dict(self):
++        class DictModule(torch.nn.Module):
++            def forward(self, x_in: torch.Tensor) -> typing.Dict[str, torch.Tensor]:
++                return {"test_key_out": x_in}
++
++        x_in = torch.tensor(1)
++        mod = DictModule()
++        mod.train(False)
++
++        f = io.BytesIO()
++        torch.onnx.export_to_pretty_string(mod, (x_in,), f)
++
++        with self.assertRaisesRegex(RuntimeError, r"DictConstruct.+is not supported."):
++            torch.onnx.export_to_pretty_string(
++                torch.jit.script(mod), (x_in,), f)
+diff --git a/test/test_datapipe.py b/test/test_datapipe.py
+index 49d2ba1ee79..a7540525259 100644
+--- a/test/test_datapipe.py
++++ b/test/test_datapipe.py
+@@ -497,6 +497,23 @@ class TestCaptureDataFrame(TestCase):
+ 
+         self.compare_capture_and_eager(operations)
+ 
++    @suppress_warnings  # Suppress warning for lambda fn
++    def test_map_with_col_file_handle_datapipe(self):
++        temp_dir = self.temp_dir.name
++        datapipe1 = dp.iter.FileLister(temp_dir, '')
++        datapipe2 = dp.iter.FileLoader(datapipe1)
++
++        def _helper(datapipe):
++            dp1 = datapipe.map(lambda x: x.read(), input_col=1)
++            dp2 = datapipe.map(lambda x: (x[0], x[1].read()))
++            self.assertEqual(list(dp1), list(dp2))
++
++        # tuple
++        _helper(datapipe2)
++        # list
++        datapipe3 = datapipe2.map(lambda x: list(x))
++        _helper(datapipe3)
++
+ 
+ class TestDataFramesPipes(TestCase):
+     """
+diff --git a/test/test_python_dispatch.py b/test/test_python_dispatch.py
+index dea96d19b74..98b869d3007 100644
+--- a/test/test_python_dispatch.py
++++ b/test/test_python_dispatch.py
+@@ -1682,5 +1682,15 @@ class TestPythonDispatcher(TestCase):
+         python_disp_shape = torch.linalg.lstsq(a, b).solution.shape
+         self.assertEqual(expected_shape, python_disp_shape)
+ 
++    def test_tolist_numpy_with_python_mode(self) -> None:
++        x = LoggingTensor(torch.tensor([2.0, 3.0]))
++        with self.assertRaisesRegex(RuntimeError, "is not supported for tensor subclasses."):
++            x.tolist()
++        with self.assertRaisesRegex(RuntimeError, "is not supported for tensor subclasses."):
++            x.numpy()
++        with self.assertRaises(AssertionError):
++            self.assertEqual(x, None)
++
++
+ if __name__ == '__main__':
+     run_tests()
+diff --git a/third_party/breakpad b/third_party/breakpad
+new file mode 160000
+index 00000000000..7d188f679d4
+--- /dev/null
++++ b/third_party/breakpad
+@@ -0,0 +1 @@
++Subproject commit 7d188f679d4ae0a5bd06408a3047d69ef8eef848
+diff --git a/torch/CMakeLists.txt b/torch/CMakeLists.txt
+index 4452ddb5b38..ca8eea0a6ed 100644
+--- a/torch/CMakeLists.txt
++++ b/torch/CMakeLists.txt
+@@ -9,6 +9,13 @@ if(NOT CAFFE2_CMAKE_BUILDING_WITH_MAIN_REPO)
+   set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+ endif()
+ 
++if(BUILD_BINARY)
++  add_library(aot_compiler SHARED
++          ${TORCH_SRC_DIR}/csrc/jit/mobile/nnc/aot_compiler.cpp
++          )
++  install(TARGETS aot_compiler DESTINATION lib)
++endif()
++
+ if(NOT BUILD_PYTHON)
+   return()
+ endif()
+diff --git a/torch/csrc/distributed/rpc/testing/init.cpp b/torch/csrc/distributed/rpc/testing/init.cpp
+index fc2dc156f7d..ead0275c8e0 100644
+--- a/torch/csrc/distributed/rpc/testing/init.cpp
++++ b/torch/csrc/distributed/rpc/testing/init.cpp
+@@ -33,7 +33,6 @@ PyObject* faulty_agent_init(PyObject* _unused, PyObject* noargs) {
+ 
+   // Import the rpc_module so we can subclass TensorPipeAgent
+   py::module rpc_module = py::module::import("torch.distributed.rpc");
+-
+ #ifdef USE_TENSORPIPE
+   shared_ptr_class_<FaultyTensorPipeRpcBackendOptions>(
+       module,
+diff --git a/torch/csrc/jit/codegen/cuda/codegen.cpp b/torch/csrc/jit/codegen/cuda/codegen.cpp
+index 6ebb2753ecb..9ce76ee2384 100644
+--- a/torch/csrc/jit/codegen/cuda/codegen.cpp
++++ b/torch/csrc/jit/codegen/cuda/codegen.cpp
+@@ -424,7 +424,7 @@ class CudaKernelGenerator : private OptOutConstDispatch {
+         } else {
+           code_ << "NEG_INFINITY";
+         }
+-      } else if (std::isnan(val)) {
++      } else if (std::isnan(double(val))) {
+         code_ << "NAN";
+       } else {
+         code_ << val;
+diff --git a/torch/distributed/elastic/agent/server/local_elastic_agent.py b/torch/distributed/elastic/agent/server/local_elastic_agent.py
+index ec1269d34ee..1e21faa6150 100644
+--- a/torch/distributed/elastic/agent/server/local_elastic_agent.py
++++ b/torch/distributed/elastic/agent/server/local_elastic_agent.py
+@@ -32,6 +32,7 @@ from torch.distributed.elastic.multiprocessing import PContext, start_processes
+ from torch.distributed.elastic.utils import macros
+ from torch.distributed.elastic.utils.logging import get_logger
+ 
++
+ log = get_logger()
+ 
+ __all__ = [
+diff --git a/torch/distributed/rpc/__init__.py b/torch/distributed/rpc/__init__.py
+index 07afb05b38b..0f0692af6c2 100644
+--- a/torch/distributed/rpc/__init__.py
++++ b/torch/distributed/rpc/__init__.py
+@@ -51,18 +51,22 @@ if is_available():
+         get_rpc_timeout,
+         enable_gil_profiling,
+         RpcBackendOptions,
+-        _TensorPipeRpcBackendOptionsBase,
++        #_TensorPipeRpcBackendOptionsBase,
+         RpcAgent,
+         PyRRef,
+-        TensorPipeAgent,
++        #TensorPipeAgent,
+         RemoteProfilerManager,
+         WorkerInfo,
+         _DEFAULT_INIT_METHOD,
+-        _DEFAULT_NUM_WORKER_THREADS,
++        #_DEFAULT_NUM_WORKER_THREADS,
+         _UNSET_RPC_TIMEOUT,
+         _DEFAULT_RPC_TIMEOUT_SEC,
+     )  # noqa: F401
+ 
++    _TensorPipeRpcBackendOptionsBase = object
++    TensorPipeAgent = object
++    _DEFAULT_NUM_WORKER_THREADS = 16
++
+     from . import api, backend_registry, functions
+     from .api import *  # noqa: F401,F403
+     import numbers
+diff --git a/torch/distributed/rpc/api.py b/torch/distributed/rpc/api.py
+index 8eda3a729c3..85b023f8624 100644
+--- a/torch/distributed/rpc/api.py
++++ b/torch/distributed/rpc/api.py
+@@ -16,7 +16,7 @@ from torch._C._distributed_rpc import (
+     PyRRef,
+     RemoteProfilerManager,
+     WorkerInfo,
+-    TensorPipeAgent,
++    #TensorPipeAgent,
+     get_rpc_timeout,
+     _cleanup_python_rpc_handler,
+     _delete_all_user_and_unforked_owner_rrefs,
+@@ -32,6 +32,7 @@ from torch._C._distributed_rpc import (
+     _reset_current_rpc_agent,
+     _set_and_start_rpc_agent,
+ )
++TensorPipeAgent = object
+ 
+ from .internal import (
+     PythonUDF,
+diff --git a/torch/distributed/rpc/constants.py b/torch/distributed/rpc/constants.py
+index ea8356fa94a..23e8adc91ec 100644
+--- a/torch/distributed/rpc/constants.py
++++ b/torch/distributed/rpc/constants.py
+@@ -2,11 +2,12 @@ from datetime import timedelta
+ 
+ from torch._C._distributed_rpc import (
+     _DEFAULT_INIT_METHOD,
+-    _DEFAULT_NUM_WORKER_THREADS,
++    #_DEFAULT_NUM_WORKER_THREADS,
+     _DEFAULT_RPC_TIMEOUT_SEC,
+     _UNSET_RPC_TIMEOUT,
+ )
+ 
++_DEFAULT_NUM_WORKER_THREADS = 16
+ 
+ # For any RpcAgent.
+ DEFAULT_RPC_TIMEOUT_SEC: float = _DEFAULT_RPC_TIMEOUT_SEC
+diff --git a/torch/distributed/rpc/options.py b/torch/distributed/rpc/options.py
+index a995184bc82..ee35749dce6 100644
+--- a/torch/distributed/rpc/options.py
++++ b/torch/distributed/rpc/options.py
+@@ -1,7 +1,7 @@
+ from typing import Dict, List, Optional, Union
+ 
+ import torch
+-from torch._C._distributed_rpc import _TensorPipeRpcBackendOptionsBase
++_TensorPipeRpcBackendOptionsBase = object
+ from . import constants as rpc_contants
+ 
+ 
+diff --git a/torch/onnx/utils.py b/torch/onnx/utils.py
+index d43d7d09fd7..cc93b2239f9 100644
+--- a/torch/onnx/utils.py
++++ b/torch/onnx/utils.py
+@@ -1005,6 +1005,20 @@ def _get_named_param_dict(graph, params):
+     _params_dict = dict(zip(param_names, params))
+     return _params_dict
+ 
++def _get_example_outputs(model, args):
++    input_args = copy.deepcopy(args)
++    input_kwargs = {}
++    if input_args and isinstance(input_args[-1], dict):
++        input_kwargs = input_args[-1]
++        input_args = input_args[:-1]
++
++    example_outputs = model(*input_args, **input_kwargs)
++    if isinstance(example_outputs, (torch.Tensor, int, float, bool)):
++        example_outputs = (example_outputs,)
++
++    if isinstance(example_outputs, list):
++        example_outputs = [example_outputs]
++    return example_outputs
+ 
+ @_beartype.beartype
+ def _get_example_outputs(model, args):
+diff --git a/torch/utils/data/datapipes/iter/callable.py b/torch/utils/data/datapipes/iter/callable.py
+index 30b04885787..be7ad95ab12 100644
+--- a/torch/utils/data/datapipes/iter/callable.py
++++ b/torch/utils/data/datapipes/iter/callable.py
+@@ -24,24 +24,19 @@ class MapperIterDataPipe(IterDataPipe[T_co]):
+     Applies a function over each item from the source DataPipe (functional name: ``map``).
+     The function can be any regular Python function or partial object. Lambda
+     function is not recommended as it is not supported by pickle.
+-
+     Args:
+         datapipe: Source Iterable DataPipe
+         fn: Function being applied over each item
+         input_col: Index or indices of data which ``fn`` is applied, such as:
+-
+             - ``None`` as default to apply ``fn`` to the data directly.
+             - Integer(s) is used for list/tuple.
+             - Key(s) is used for dict.
+-
+         output_col: Index of data where result of ``fn`` is placed. ``output_col`` can be specified
+             only when ``input_col`` is not ``None``
+-
+             - ``None`` as default to replace the index that ``input_col`` specified; For ``input_col`` with
+               multiple indices, the left-most one is used, and other indices will be removed.
+             - Integer is used for list/tuple. ``-1`` represents to append result at the end.
+             - Key is used for dict. New key is acceptable.
+-
+     Example:
+         >>> # xdoctest: +SKIP
+         >>> from torchdata.datapipes.iter import IterableWrapper, Mapper
+@@ -173,16 +168,13 @@ class CollatorIterDataPipe(MapperIterDataPipe):
+     r"""
+     Collates samples from DataPipe to Tensor(s) by a custom collate function (functional name: ``collate``).
+     By default, it uses :func:`torch.utils.data.default_collate`.
+-
+     .. note::
+         While writing a custom collate function, you can import :func:`torch.utils.data.default_collate` for the
+         default behavior and `functools.partial` to specify any additional arguments.
+-
+     Args:
+         datapipe: Iterable DataPipe being collated
+         collate_fn: Customized collate function to collect and combine data or a batch of data.
+             Default function collates to Tensor(s) based on data type.
+-
+     Example: Convert integer data to float Tensor
+         >>> class MyIterDataPipe(torch.utils.data.IterDataPipe):
+         ...     def __init__(self, start, end):
+@@ -230,4 +222,4 @@ class CollatorIterDataPipe(MapperIterDataPipe):
+             else:
+                 # TODO(VitalyFedyunin): Validate passed dictionary
+                 collate_fn = functools.partial(_collate_helper, conversion)
+-                super().__init__(datapipe, fn=collate_fn)
++                super().__init__(datapipe, fn=collate_fn)
+\ No newline at end of file
+diff --git a/torch/utils/data/datapipes/iter/httpreader.py b/torch/utils/data/datapipes/iter/httpreader.py
+new file mode 100644
+index 00000000000..f13aa5bfc7e
+--- /dev/null
++++ b/torch/utils/data/datapipes/iter/httpreader.py
+@@ -0,0 +1,48 @@
++from io import IOBase
++from typing import Sized, Tuple
++from urllib.error import HTTPError, URLError
++import urllib.request as urllib
++from torch.utils.data import IterDataPipe
++from torch.utils.data.datapipes.utils.common import deprecation_warning_torchdata
++
++
++class HTTPReaderIterDataPipe(IterDataPipe[Tuple[str, IOBase]]):
++    r""" :class:`HTTPReaderIterDataPipe`
++
++    Iterable DataPipe to load file url(s) (http url(s) pointing to file(s)),
++    yield file url and IO stream in a tuple
++
++    Args:
++        datapipe: Iterable DataPipe providing urls
++        timeout: Timeout for http request
++    """
++
++    def __init__(self, datapipe, timeout=None):
++        self.datapipe = datapipe
++        self.timeout = timeout
++        deprecation_warning_torchdata(type(self).__name__)
++
++    def __iter__(self):
++        for furl in self.datapipe:
++            try:
++                if self.timeout is None:
++                    r = urllib.urlopen(furl)
++                else:
++                    r = urllib.urlopen(furl, timeout=self.timeout)
++
++                yield(furl, r)
++            except HTTPError as e:
++                raise Exception("Could not get the file.\
++                                [HTTP Error] {code}: {reason}."
++                                .format(code=e.code, reason=e.reason))
++            except URLError as e:
++                raise Exception("Could not get the file at {url}.\
++                                 [URL Error] {reason}."
++                                .format(reason=e.reason, url=furl))
++            except Exception:
++                raise
++
++    def __len__(self) -> int:
++        if isinstance(self.datapipe, Sized):
++            return len(self.datapipe)
++        raise TypeError("{} instance doesn't have valid length".format(type(self).__name__))
+diff --git a/torch/utils/data/datapipes/iter/linereader.py b/torch/utils/data/datapipes/iter/linereader.py
+new file mode 100644
+index 00000000000..311053eb973
+--- /dev/null
++++ b/torch/utils/data/datapipes/iter/linereader.py
+@@ -0,0 +1,23 @@
++from typing import Tuple
++from torch.utils.data import IterDataPipe
++from torch.utils.data.datapipes.utils.common import deprecation_warning_torchdata
++
++
++class LineReaderIterDataPipe(IterDataPipe[Tuple[str, str]]):
++    r""" :class:`LineReaderIterDataPipe`
++
++    Iterable DataPipe to load file name and stream as source IterDataPipe
++    and yield filename and line(s).
++
++    Args:
++        datapipe: Iterable DataPipe providing file name and string file stream
++    """
++
++    def __init__(self, datapipe):
++        self.datapipe = datapipe
++        deprecation_warning_torchdata(type(self).__name__)
++
++    def __iter__(self):
++        for file_name, stream in self.datapipe:
++            for line in stream:
++                yield file_name, line
+diff --git a/torch/utils/data/datapipes/iter/tararchivereader.py b/torch/utils/data/datapipes/iter/tararchivereader.py
+new file mode 100644
+index 00000000000..60bb16f149e
+--- /dev/null
++++ b/torch/utils/data/datapipes/iter/tararchivereader.py
+@@ -0,0 +1,64 @@
++from torch.utils.data import IterDataPipe
++from torch.utils.data.datapipes.utils.common import validate_pathname_binary_tuple, deprecation_warning_torchdata
++from typing import Iterable, Iterator, Tuple, Optional, IO, cast
++from io import BufferedIOBase
++
++import os
++import tarfile
++import warnings
++
++class TarArchiveReaderIterDataPipe(IterDataPipe[Tuple[str, BufferedIOBase]]):
++    r""" :class:`TarArchiveReaderIterDataPipe`.
++
++    Iterable datapipe to extract tar binary streams from input iterable which contains tuples of pathnames and
++    tar binary stream. This yields a tuple of pathname and extracted binary stream.
++
++    Args:
++        datapipe: Iterable datapipe that provides tuples of pathname and tar binary stream
++        mode: File mode used by `tarfile.open` to read file object.
++            Mode has to be a string of the form 'filemode[:compression]'
++        length: a nominal length of the datapipe
++
++    Note:
++        The opened file handles will be closed automatically if the default DecoderDataPipe
++        is attached. Otherwise, user should be responsible to close file handles explicitly
++        or let Python's GC close them periodically.
++    """
++    def __init__(
++        self,
++        datapipe: Iterable[Tuple[str, BufferedIOBase]],
++        mode: str = "r:*",
++        length: int = -1
++    ):
++        super().__init__()
++        self.datapipe: Iterable[Tuple[str, BufferedIOBase]] = datapipe
++        self.mode: str = mode
++        self.length: int = length
++        deprecation_warning_torchdata(type(self).__name__)
++
++    def __iter__(self) -> Iterator[Tuple[str, BufferedIOBase]]:
++        for data in self.datapipe:
++            validate_pathname_binary_tuple(data)
++            pathname, data_stream = data
++            folder_name = os.path.dirname(pathname)
++            try:
++                # typing.cast is used here to silence mypy's type checker
++                tar = tarfile.open(fileobj=cast(Optional[IO[bytes]], data_stream), mode=self.mode)
++                for tarinfo in tar:
++                    if not tarinfo.isfile():
++                        continue
++                    extracted_fobj = tar.extractfile(tarinfo)
++                    if extracted_fobj is None:
++                        warnings.warn("failed to extract file {} from source tarfile {}".format(tarinfo.name, pathname))
++                        raise tarfile.ExtractError
++                    inner_pathname = os.path.normpath(os.path.join(folder_name, tarinfo.name))
++                    yield (inner_pathname, extracted_fobj)  # type: ignore[misc]
++            except Exception as e:
++                warnings.warn(
++                    "Unable to extract files from corrupted tarfile stream {} due to: {}, abort!".format(pathname, e))
++                raise e
++
++    def __len__(self):
++        if self.length == -1:
++            raise TypeError("{} instance doesn't have valid length".format(type(self).__name__))
++        return self.length
+diff --git a/torch/utils/data/datapipes/iter/ziparchivereader.py b/torch/utils/data/datapipes/iter/ziparchivereader.py
+new file mode 100644
+index 00000000000..988384b79b2
+--- /dev/null
++++ b/torch/utils/data/datapipes/iter/ziparchivereader.py
+@@ -0,0 +1,63 @@
++from torch.utils.data import IterDataPipe
++from torch.utils.data.datapipes.utils.common import validate_pathname_binary_tuple, deprecation_warning_torchdata
++from typing import Iterable, Iterator, Tuple, IO, cast
++from io import BufferedIOBase
++
++import os
++import sys
++import zipfile
++import warnings
++
++class ZipArchiveReaderIterDataPipe(IterDataPipe[Tuple[str, BufferedIOBase]]):
++    r""" :class:`ZipArchiveReaderIterDataPipe`.
++
++    Iterable data pipe to extract zip binary streams from input iterable which contains a tuple of pathname and
++    zip binary stream. This yields a tuple of pathname and extracted binary stream.
++
++    Args:
++        datapipe: Iterable datapipe that provides tuples of pathname and zip binary stream
++        length: Nominal length of the datapipe
++
++    Note:
++        The opened file handles will be closed automatically if the default DecoderDataPipe
++        is attached. Otherwise, user should be responsible to close file handles explicitly
++        or let Python's GC close them periodically. Due to how zipfiles implements its open() method,
++        the data_stream variable below cannot be closed within the scope of this function.
++    """
++    def __init__(
++            self,
++            datapipe: Iterable[Tuple[str, BufferedIOBase]],
++            length: int = -1):
++        super().__init__()
++        self.datapipe: Iterable[Tuple[str, BufferedIOBase]] = datapipe
++        self.length: int = length
++        deprecation_warning_torchdata(type(self).__name__)
++
++    def __iter__(self) -> Iterator[Tuple[str, BufferedIOBase]]:
++        for data in self.datapipe:
++            validate_pathname_binary_tuple(data)
++            pathname, data_stream = data
++            folder_name = os.path.dirname(pathname)
++            try:
++                # typing.cast is used here to silence mypy's type checker
++                zips = zipfile.ZipFile(cast(IO[bytes], data_stream))
++                for zipinfo in zips.infolist():
++                    # major version should always be 3 here.
++                    if sys.version_info[1] >= 6:
++                        if zipinfo.is_dir():
++                            continue
++                    elif zipinfo.filename.endswith('/'):
++                        continue
++                    extracted_fobj = zips.open(zipinfo)
++                    inner_pathname = os.path.normpath(os.path.join(folder_name, zipinfo.filename))
++                    yield (inner_pathname, extracted_fobj)  # type: ignore[misc]
++            except Exception as e:
++                warnings.warn(
++                    f"Unable to extract files from corrupted zipfile stream {pathname} due to: {e}, abort!")
++                raise e
++            # We are unable to close 'data_stream' here, because it needs to be available to use later
++
++    def __len__(self):
++        if self.length == -1:
++            raise TypeError(f"{type(self).__name__} instance doesn't have valid length")
++        return self.length
