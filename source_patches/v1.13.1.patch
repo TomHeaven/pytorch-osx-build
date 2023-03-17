@@ -742,10 +742,6 @@ index 0f5ed3b3fcd..db2245a97a2 100644
  endif()
  
  if(CUDA_FOUND)
-diff --git a/ios/TestApp/AppleWWDRCAG3.cer b/ios/TestApp/AppleWWDRCAG3.cer
-new file mode 100644
-index 00000000000..32f96f81dd6
-Binary files /dev/null and b/ios/TestApp/AppleWWDRCAG3.cer differ
 diff --git a/modules/detectron/CMakeLists.txt b/modules/detectron/CMakeLists.txt
 index 46276114c5e..50d011db18c 100644
 --- a/modules/detectron/CMakeLists.txt
