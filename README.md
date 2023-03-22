@@ -1,9 +1,8 @@
 # Pytorch OSX Build
 
-Unfortunately, the Pytorch team does not release binary package for Mac OS with CUDA support. This project provides off-the-shelf binary packages. ``Both Python 2.7 and 3.7 are supported now!``
+Unfortunately, the Pytorch team does not release binary package for Mac OS with CUDA support. This project provides off-the-shelf binary packages.
 
-
-很不幸，Pytorch团队不发布 Mac OS CUDA版。本项目提供 Mac OS 上编译好、可直接安装的Pytorch CUDA版本。``本项目同时支持Python 2.7 和 3.7 了！``
+很不幸，Pytorch团队不发布 Mac OS CUDA版。本项目提供 Mac OS 上编译好、可直接安装的Pytorch CUDA版本。
 
 # Performance Warning
 【2020.02.18】I benchmarked Pytorch 1.3.1 with CUDA 10.1 and CUDNN 7.6.5 on Mac OS X 10.13.6 and Ubuntu 16.04, performance on Mac OS is around 2/3 of that on Ubuntu. In addition, it is more likey to encounter "CUDA OUT OF MEMORY" error on Mac OS since the operating system takes a large amount of GPU memory for display. Be aware of this performance difference and if you have a lot of data to process, you would better turn to Ubuntu!
@@ -22,7 +21,7 @@ If you find the releases cannot meet your requirements, you can compile from sou
 + Guides are avaiable: 
  - [1.0.1](https://github.com/TomHeaven/pytorch-osx-build/blob/master/BuildInstractions-1.0.1.md).
  - [1.0rc1](https://github.com/TomHeaven/pytorch-osx-build/blob/master/BuildInstractions-1.0rc1.md).
-+ Source pathces are availabe at `source_pathes` folder of master branch.
++ Source pathces are availabe at `source_pathes` folder of the master branch.
 
 
 
@@ -34,7 +33,7 @@ You can find releases in  [release page](https://github.com/TomHeaven/pytorch-os
 你可以在[Release页面](https://github.com/TomHeaven/pytorch-osx-build/releases)找到发布版本。
 
 
-# Installation for Python 2.7
+# Installation for Python 2.7 (Outedated)
 
 First, ensure your CUDA driver and cudnn is installed properly, and copy dependencies in folder `usr_local_lib` to path `/usr/local/lib`. Also, install OpenMP using Homebrew.
 
