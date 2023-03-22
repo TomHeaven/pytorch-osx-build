@@ -1,0 +1,177 @@
+diff --git a/llvm/include/llvm/ADT/PointerIntPair.h b/llvm/include/llvm/ADT/PointerIntPair.h
+index f73f5bcd6..2416c4483 100644
+--- a/llvm/include/llvm/ADT/PointerIntPair.h
++++ b/llvm/include/llvm/ADT/PointerIntPair.h
+@@ -278,6 +278,12 @@ get(const PointerIntPair<PointerTy, IntBits, IntType, PtrTraits, Info> &Pair) {
+ } // end namespace llvm
+ 
+ namespace std {
++// The GCC standard library defines tuple_size as class and struct
++// which triggers a warning here.
++#if defined(__clang__)
++#pragma GCC diagnostic push
++#pragma GCC diagnostic ignored "-Wmismatched-tags"
++#endif
+ template <typename PointerTy, unsigned IntBits, typename IntType,
+           typename PtrTraits, typename Info>
+ struct tuple_size<
+@@ -289,6 +295,9 @@ template <std::size_t I, typename PointerTy, unsigned IntBits, typename IntType,
+ struct tuple_element<
+     I, llvm::PointerIntPair<PointerTy, IntBits, IntType, PtrTraits, Info>>
+     : std::conditional<I == 0, PointerTy, IntType> {};
++#if defined(__clang__)
++#pragma GCC diagnostic pop
++#endif
+ } // namespace std
+ 
+ #endif // LLVM_ADT_POINTERINTPAIR_H
+diff --git a/llvm/include/llvm/ADT/STLExtras.h b/llvm/include/llvm/ADT/STLExtras.h
+index bf33d7980..fa4ef0475 100644
+--- a/llvm/include/llvm/ADT/STLExtras.h
++++ b/llvm/include/llvm/ADT/STLExtras.h
+@@ -2524,6 +2524,12 @@ template <class T> constexpr T *to_address(T *P) { return P; }
+ } // end namespace llvm
+ 
+ namespace std {
++// The GCC standard library defines tuple_size as class and struct
++// which triggers a warning here.
++#if defined(__clang__)
++#pragma GCC diagnostic push
++#pragma GCC diagnostic ignored "-Wmismatched-tags"
++#endif
+ template <typename... Refs>
+ struct tuple_size<llvm::detail::enumerator_result<Refs...>>
+     : std::integral_constant<std::size_t, sizeof...(Refs)> {};
+@@ -2535,7 +2541,9 @@ struct tuple_element<I, llvm::detail::enumerator_result<Refs...>>
+ template <std::size_t I, typename... Refs>
+ struct tuple_element<I, const llvm::detail::enumerator_result<Refs...>>
+     : std::tuple_element<I, std::tuple<Refs...>> {};
+-
++#if defined(__clang__)
++#pragma GCC diagnostic pop
++#endif
+ } // namespace std
+ 
+ #endif // LLVM_ADT_STLEXTRAS_H
+diff --git a/llvm/include/llvm/ADT/StringMapEntry.h b/llvm/include/llvm/ADT/StringMapEntry.h
+index 98b51cc1a..f314a8d2e 100644
+--- a/llvm/include/llvm/ADT/StringMapEntry.h
++++ b/llvm/include/llvm/ADT/StringMapEntry.h
+@@ -161,6 +161,12 @@ decltype(auto) get(const StringMapEntry<ValueTy> &E) {
+ } // end namespace llvm
+ 
+ namespace std {
++// The GCC standard library defines tuple_size as class and struct
++// which triggers a warning here.
++#if defined(__clang__)
++#pragma GCC diagnostic push
++#pragma GCC diagnostic ignored "-Wmismatched-tags"
++#endif
+ template <typename ValueTy>
+ struct tuple_size<llvm::StringMapEntry<ValueTy>>
+     : std::integral_constant<std::size_t, 2> {};
+@@ -168,6 +174,9 @@ struct tuple_size<llvm::StringMapEntry<ValueTy>>
+ template <std::size_t I, typename ValueTy>
+ struct tuple_element<I, llvm::StringMapEntry<ValueTy>>
+     : std::conditional<I == 0, llvm::StringRef, ValueTy> {};
++#if defined(__clang__)
++#pragma GCC diagnostic pop
++#endif
+ } // namespace std
+ 
+ #endif // LLVM_ADT_STRINGMAPENTRY_H
+diff --git a/llvm/lib/Support/Program.cpp b/llvm/lib/Support/Program.cpp
+index 1dcd45e2d..881caece1 100644
+--- a/llvm/lib/Support/Program.cpp
++++ b/llvm/lib/Support/Program.cpp
+@@ -43,7 +43,8 @@ int sys::ExecuteAndWait(StringRef Program, ArrayRef<StringRef> Args,
+     if (ExecutionFailed)
+       *ExecutionFailed = false;
+     ProcessInfo Result = Wait(
+-        PI, SecondsToWait == 0 ? std::nullopt : std::optional(SecondsToWait),
++        // PI, SecondsToWait == 0 ? std::nullopt : std::optional(SecondsToWait),
++        PI, SecondsToWait == 0 ? std::nullopt : std::optional<unsigned int>(SecondsToWait),
+         ErrMsg, ProcStat);
+     return Result.ReturnCode;
+   }
+diff --git a/llvm/lib/Target/AMDGPU/AsmParser/AMDGPUAsmParser.cpp b/llvm/lib/Target/AMDGPU/AsmParser/AMDGPUAsmParser.cpp
+index 1cff11227..23936a334 100644
+--- a/llvm/lib/Target/AMDGPU/AsmParser/AMDGPUAsmParser.cpp
++++ b/llvm/lib/Target/AMDGPU/AsmParser/AMDGPUAsmParser.cpp
+@@ -5508,9 +5508,9 @@ bool AMDGPUAsmParser::ParseDirectiveHSAMetadata() {
+   const char *AssemblerDirectiveEnd;
+   std::tie(AssemblerDirectiveBegin, AssemblerDirectiveEnd) =
+       isHsaAbiVersion3AndAbove(&getSTI())
+-          ? std::tuple(HSAMD::V3::AssemblerDirectiveBegin,
++          ? std::tuple<const char*, const char*>(HSAMD::V3::AssemblerDirectiveBegin,
+                        HSAMD::V3::AssemblerDirectiveEnd)
+-          : std::tuple(HSAMD::AssemblerDirectiveBegin,
++          : std::tuple<const char*, const char*>(HSAMD::AssemblerDirectiveBegin,
+                        HSAMD::AssemblerDirectiveEnd);
+ 
+   if (getSTI().getTargetTriple().getOS() != Triple::AMDHSA) {
+diff --git a/llvm/lib/Target/X86/X86ISelLowering.cpp b/llvm/lib/Target/X86/X86ISelLowering.cpp
+index e9a069b72..a6f141294 100644
+--- a/llvm/lib/Target/X86/X86ISelLowering.cpp
++++ b/llvm/lib/Target/X86/X86ISelLowering.cpp
+@@ -41875,7 +41875,7 @@ static SDValue combineTargetShuffle(SDValue N, SelectionDAG &DAG,
+     // See if this reduces to a PSHUFD which is no more expensive and can
+     // combine with more operations. Note that it has to at least flip the
+     // dwords as otherwise it would have been removed as a no-op.
+-    if (ArrayRef(Mask).equals({2, 3, 0, 1})) {
++    if (ArrayRef<int>(Mask).equals({2, 3, 0, 1})) {
+       int DMask[] = {0, 1, 2, 3};
+       int DOffset = N.getOpcode() == X86ISD::PSHUFLW ? 0 : 2;
+       DMask[DOffset + 0] = DOffset + 1;
+@@ -41910,8 +41910,8 @@ static SDValue combineTargetShuffle(SDValue N, SelectionDAG &DAG,
+         int MappedMask[8];
+         for (int i = 0; i < 8; ++i)
+           MappedMask[i] = 2 * DMask[WordMask[i] / 2] + WordMask[i] % 2;
+-        if (ArrayRef(MappedMask).equals({0, 0, 1, 1, 2, 2, 3, 3}) ||
+-            ArrayRef(MappedMask).equals({4, 4, 5, 5, 6, 6, 7, 7})) {
++        if (ArrayRef<int>(MappedMask).equals({0, 0, 1, 1, 2, 2, 3, 3}) ||
++            ArrayRef<int>(MappedMask).equals({4, 4, 5, 5, 6, 6, 7, 7})) {
+           // We can replace all three shuffles with an unpack.
+           V = DAG.getBitcast(VT, D.getOperand(0));
+           return DAG.getNode(MappedMask[0] == 0 ? X86ISD::UNPCKL
+diff --git a/llvm/lib/Transforms/Utils/MemoryOpRemark.cpp b/llvm/lib/Transforms/Utils/MemoryOpRemark.cpp
+index aa57ad847..c9ba67116 100644
+--- a/llvm/lib/Transforms/Utils/MemoryOpRemark.cpp
++++ b/llvm/lib/Transforms/Utils/MemoryOpRemark.cpp
+@@ -343,7 +343,7 @@ void MemoryOpRemark::visitVariable(const Value *V,
+   // If not, get it from the alloca.
+   std::optional<TypeSize> TySize = AI->getAllocationSize(DL);
+   std::optional<uint64_t> Size =
+-      TySize ? std::optional(TySize->getFixedValue()) : std::nullopt;
++      TySize ? std::optional<uint64_t>(TySize->getFixedValue()) : std::nullopt;
+   VariableInfo Var{nameOrNone(AI), Size};
+   if (!Var.isEmpty())
+     Result.push_back(std::move(Var));
+diff --git a/mlir/include/mlir/Dialect/SparseTensor/IR/Enums.h b/mlir/include/mlir/Dialect/SparseTensor/IR/Enums.h
+index 89065b15b..b0c8bd7f6 100644
+--- a/mlir/include/mlir/Dialect/SparseTensor/IR/Enums.h
++++ b/mlir/include/mlir/Dialect/SparseTensor/IR/Enums.h
+@@ -283,7 +283,7 @@ constexpr std::optional<DimLevelType>
+ getDimLevelType(LevelFormat lf, bool ordered, bool unique) {
+   auto dlt = static_cast<DimLevelType>(static_cast<uint8_t>(lf) |
+                                        (ordered ? 0 : 2) | (unique ? 0 : 1));
+-  return isValidDLT(dlt) ? std::optional(dlt) : std::nullopt;
++  return isValidDLT(dlt) ? std::optional<DimLevelType>(dlt) : std::nullopt;
+ }
+ 
+ /// Ensure the above conversion works as intended.
+diff --git a/mlir/lib/Dialect/Vector/IR/VectorOps.cpp b/mlir/lib/Dialect/Vector/IR/VectorOps.cpp
+index 9796693b4..7f286b777 100644
+--- a/mlir/lib/Dialect/Vector/IR/VectorOps.cpp
++++ b/mlir/lib/Dialect/Vector/IR/VectorOps.cpp
+@@ -1372,8 +1372,8 @@ LogicalResult
+ ExtractFromInsertTransposeChainState::handleInsertOpWithMatchingPos(
+     Value &res) {
+   auto insertedPos = extractVector<int64_t>(nextInsertOp.getPosition());
+-  if (ArrayRef(insertedPos) !=
+-      llvm::ArrayRef(extractPosition).take_front(extractedRank))
++  if (ArrayRef<int64_t>(insertedPos) !=
++      llvm::ArrayRef<int64_t>(extractPosition).take_front(extractedRank))
+     return failure();
+   // Case 2.a. early-exit fold.
+   res = nextInsertOp.getSource();

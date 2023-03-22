@@ -1,0 +1,167 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index ff2e73c1e..4a772d2a0 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -12,7 +12,7 @@ set(CMAKE_CXX_STANDARD 17)
+ 
+ set(CMAKE_INCLUDE_CURRENT_DIR ON)
+ 
+-project(triton)
++project(triton LANGUAGES C CXX)
+ include(CTest)
+ 
+ if(NOT WIN32)
+@@ -55,7 +55,7 @@ endif()
+ set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -D__STDC_FORMAT_MACROS  -fPIC -std=gnu++17 -fvisibility=hidden -fvisibility-inlines-hidden")
+ 
+ if(APPLE)
+-  set(CMAKE_OSX_DEPLOYMENT_TARGET 11.6)
++  set(CMAKE_OSX_DEPLOYMENT_TARGET 10.13)
+ endif()
+ 
+ # #########
+diff --git a/lib/Target/LLVMIR/LLVMIRTranslation.cpp b/lib/Target/LLVMIR/LLVMIRTranslation.cpp
+index fd9419d01..9ce86d11a 100644
+--- a/lib/Target/LLVMIR/LLVMIRTranslation.cpp
++++ b/lib/Target/LLVMIR/LLVMIRTranslation.cpp
+@@ -23,7 +23,10 @@
+ #include "llvm/Linker/Linker.h"
+ #include "llvm/Support/SourceMgr.h"
+ #include <dlfcn.h>
+-#include <filesystem>
++
++#define GHC_WITH_EXCEPTIONS
++#include <filesystem.hpp>
++
+ #include <iterator>
+ 
+ namespace mlir {
+@@ -143,16 +146,16 @@ static std::map<std::string, std::string> getExternLibs(mlir::ModuleOp module) {
+       externLibs.try_emplace(libdevice, env_path);
+       return externLibs;
+     }
+-    namespace fs = std::filesystem;
++    namespace fs = ghc::filesystem;
+     // Search for libdevice relative to its library path if used from Python
+     // Then native code is in `triton/_C/libtriton.so` and libdevice in
+     // `triton/third_party/cuda/lib/libdevice.10.bc`
+     static const auto this_library_path = [] {
+       Dl_info fileinfo;
+       if (dladdr(reinterpret_cast<void *>(&getExternLibs), &fileinfo) == 0) {
+-        return std::filesystem::path();
++        return ghc::filesystem::path();
+       }
+-      return std::filesystem::path(fileinfo.dli_fname);
++      return ghc::filesystem::path(fileinfo.dli_fname);
+     }();
+     static const auto runtime_path =
+         this_library_path.parent_path().parent_path() / "third_party" / "cuda" /
+@@ -165,7 +168,7 @@ static std::map<std::string, std::string> getExternLibs(mlir::ModuleOp module) {
+       // using its default path:
+       // [triton root dir]/python/triton/language/libdevice.10.bc
+       // TODO(Keren): handle external linkage other than libdevice?
+-      static const auto this_file_path = std::filesystem::path(__FILE__);
++      static const auto this_file_path = ghc::filesystem::path(__FILE__);
+       static const auto compiletime_path = this_file_path.parent_path()
+                                                .parent_path()
+                                                .parent_path()
+diff --git a/python/setup.py b/python/setup.py
+index 1b5f178c1..a6f85a806 100644
+--- a/python/setup.py
++++ b/python/setup.py
+@@ -85,15 +85,15 @@ def get_thirdparty_packages(triton_cache_path):
+         version_file_path = os.path.join(package_dir, "version.txt")
+         if p.syspath_var_name not in os.environ and\
+            (not os.path.exists(version_file_path) or Path(version_file_path).read_text() != p.url):
+-            try:
+-                shutil.rmtree(package_root_dir)
+-            except Exception:
+-                pass
++            #try:
++            #    shutil.rmtree(package_root_dir)
++            #except Exception:
++            #    pass
+             os.makedirs(package_root_dir, exist_ok=True)
+             print(f'downloading and extracting {p.url} ...')
+-            ftpstream = urllib.request.urlopen(p.url)
+-            file = tarfile.open(fileobj=ftpstream, mode="r|*")
+-            file.extractall(path=package_root_dir)
++            #ftpstream = urllib.request.urlopen(p.url)
++            #file = tarfile.open(fileobj=ftpstream, mode="r|*")
++            #file.extractall(path=package_root_dir)
+             # write version url to package_dir
+             with open(os.path.join(package_dir, "version.txt"), "w") as f:
+                 f.write(p.url)
+diff --git a/python/src/triton.cc b/python/src/triton.cc
+index 1cce60901..10b9bf24d 100644
+--- a/python/src/triton.cc
++++ b/python/src/triton.cc
+@@ -50,6 +50,7 @@
+ #include <sstream>
+ #include <stdexcept>
+ #include <string>
++#include <iostream>
+ 
+ namespace py = pybind11;
+ 
+@@ -1545,20 +1546,30 @@ void init_triton_translation(py::module &m) {
+           const char *_fsrc = fsrc.c_str();
+           const char *_flog = flog.c_str();
+           const char *_fbin = fbin.c_str();
++     
+           std::ofstream ofs(_fsrc);
+           ofs << ptxCode << std::endl;
+           ofs.close();
++
+           std::string cmd;
+           int err;
+           cmd = ptxasPath + " -v --gpu-name=sm_" + std::to_string(capability) +
+                 (capability == 90 ? "a " : " ") + _fsrc + " -o " + _fsrc +
+                 ".o 2> " + _flog;
+-
+           err = system(cmd.c_str());
++
+           if (err != 0) {
+             err >>= 8;
+             std::ifstream _log(_flog);
+             std::string log(std::istreambuf_iterator<char>(_log), {});
++            // DEBUG:
++            std::cout << "DEBUG INFO: `ptxas` failed with error code " +
++                                       std::to_string(err) + ": \n" + log << std::endl;
++            std::cout << "    fsrc : " << std::string(fsrc) << std::endl;
++            std::cout << "    flog : " << std::string(flog) << std::endl;
++            std::cout << "    cmd : "  << cmd << std::endl;
++            std::cout << "    ptxCode:" << std::endl << ptxCode << std::endl;
++            ///
+             if (err == 255) {
+               throw std::runtime_error("Internal Triton PTX codegen error: \n" +
+                                        log);
+diff --git a/python/triton/compiler.py b/python/triton/compiler.py
+index ffef4be9b..a01961bb1 100644
+--- a/python/triton/compiler.py
++++ b/python/triton/compiler.py
+@@ -21,6 +21,7 @@ from typing import Any, Callable, Dict, Optional, Tuple, Union
+ import setuptools
+ import torch
+ from filelock import FileLock
++import distutils
+ 
+ import triton
+ import triton._C.libtriton.triton as _triton
+@@ -1516,8 +1517,11 @@ def _build(name, src, srcdir):
+     if scheme == 'posix_local':
+         scheme = 'posix_prefix'
+     py_include_dir = sysconfig.get_paths(scheme=scheme)["include"]
+-
+-    cc_cmd = [cc, src, "-O3", f"-I{cu_include_dir}", f"-I{py_include_dir}", f"-I{srcdir}", "-shared", "-fPIC", "-lcuda", "-o", so]
++    # Tom modified.
++    pythonlib_dir = distutils.sysconfig.get_config_var("LIBDIR")
++    pythonlib_name = os.path.splitext(distutils.sysconfig.get_config_var("LIBRARY")[3:])[0]
++    cc_cmd = [cc, src, "-O3", f"-I{cu_include_dir}", f"-I{py_include_dir}", f"-I{srcdir}", "-shared", "-fPIC", 
++              "-L/usr/local/cuda/lib", "-L" + pythonlib_dir, "-lcuda", "-l" + pythonlib_name, "-o", so]
+     cc_cmd += [f"-L{dir}" for dir in cuda_lib_dirs]
+     ret = subprocess.check_call(cc_cmd)
+ 
+diff --git a/python/triton/third_party/cuda/bin/ptxas b/python/triton/third_party/cuda/bin/ptxas
+index bf7c4ec86..d2b225f65 100755
+Binary files a/python/triton/third_party/cuda/bin/ptxas and b/python/triton/third_party/cuda/bin/ptxas differ
